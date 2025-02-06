@@ -11,6 +11,13 @@ const userSchema = new Schema({
         type: String,
         required:true
     },
+    userName: {
+        type: String,
+        required: true,
+        unique: true, // Ensures username uniqueness
+        trim: true,
+        lowercase: true, // Normalizes the username
+    },
     Email: {
         type: String,
         required: true,

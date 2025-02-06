@@ -1,10 +1,15 @@
 const express = require('express');
 const path = require('path');
 const userRoutes = require('./routes/userRoutes'); // Import userRoutes
+const postRoutes = require('./routes/postRoutes'); // Import postRoutes
+const profileRoutes = require('./routes/profileRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+
 require('dotenv').config();
 const Post = require('./models/post');  // Add this at the top
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+
 
 
 const app = express();
@@ -18,8 +23,6 @@ app.use(cookieParser());
 app.use(cors({
   origin: 'http://localhost:3001', // Your frontend URL
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Add this after your routes to handle preflight requests
@@ -37,19 +40,9 @@ app.use(express.json());
 
 // API routes
 app.use('/api/users', userRoutes); // Mount user-related routes
-
-// Replace the existing /api/posts route with:
-app.get('/api/posts', async (req, res) => {
-  try {
-    const posts = await Post.find()
-      .sort({ createdAt: -1 })
-      .populate('user');
-    res.json(posts);
-  } catch (err) {
-    res.status(500).json({ error: 'Error fetching posts' });
-  }
-});
-
+app.use('/api/posts', postRoutes); // Mount posts router
+app.use('/api/profile', profileRoutes);
+app.use('/api/comments', commentRoutes);
 
 
 

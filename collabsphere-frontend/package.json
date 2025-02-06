@@ -5,7 +5,7 @@
   "main": "index.js",
   "proxy": "http://localhost:3000",
   "scripts": {
-    "start": "react-scripts --openssl-legacy-provider start",
+    "start": "DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
@@ -19,6 +19,7 @@
     "@testing-library/user-event": "^14.5.2",
     "ajv": "^8.17.1",
     "axios": "^1.7.9",
+    "nice-try": "^3.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.1",

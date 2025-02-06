@@ -30,29 +30,19 @@ const user_login_post = async (req, res) => {
     // Generate JWT token
     const token = await user.jwtGenerateToken();
     
-    // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
-
-    // Send response with redirect URL
-    res.status(200).json({
-      success: true,
-      redirectUrl: '/posts',
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.Email
-      }
-    });
-
+    res
+      .status(200)
+      .cookie('token', token, {
+        httpOnly: true,
+        maxAge: 86400000 // 24 hours in milliseconds
+      })
+      .json({
+        success: true,
+        redirectUrl: '/posts'
+      });
+      
   } catch (err) {
-    console.error('Error during login:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: err.message });
   }
 };
 
@@ -82,7 +72,7 @@ const user_signup_get = (req, res) => {
 };
 
 const user_signup_post = async (req, res) => {
-  const { firstName, lastName, Email, Password, confirmPassword } = req.body;
+  const { firstName, lastName, Email, userName, Password, confirmPassword } = req.body;
 
   try {
     if (!mailChecker.isValid(Email)) {
@@ -105,6 +95,11 @@ const user_signup_post = async (req, res) => {
       return res.status(400).json({ message: "Passwords don't match" });
     }
 
+    const user1 = await User.findOne({ userName });
+    if (user1) {
+      return res.status(400).json({ message: "Username already taken" });
+    }
+
     const hashedPassword = await bcrypt.hash(Password, 10);
     const verificationToken = jwt.sign({ Email }, process.env.JWT_SECRET, { expiresIn: '1d' });
 
@@ -112,6 +107,7 @@ const user_signup_post = async (req, res) => {
       firstName,
       lastName,
       Email,
+      userName,
       Password: hashedPassword,
       emailVerificationToken: verificationToken,
       emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // Token expires in 1 day
@@ -162,6 +158,7 @@ const verify_email = async (req, res) => {
 
     // Verify the token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded._id);  // Change id to _id
 
     // Find the user by email and token
     const user = await User.findOne({

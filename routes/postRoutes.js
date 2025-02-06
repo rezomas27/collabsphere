@@ -1,41 +1,18 @@
+// routes/postRoutes.js
 const express = require('express');
 const router = express.Router();
-const postController = require('../controllers/postController')
-const jwt = require('jsonwebtoken'); // Import jsonwebtoken
-const User = require('../models/user'); // Ensure the correct path to your User model
+const postController = require('../controllers/postController');
+const { protect } = require('../middleware/authMiddleware');
 
+// Public routes (no auth required)
+router.get('/browse', postController.browse_posts);
+router.get('/view/:id', postController.post_details);
 
-
-const authMiddleware = async (req, res, next) => {
-    try {
-        const token = req.cookies.token;  // Get the token from cookies
-        if (!token) {
-            console.log('No token found, redirecting to login');
-            return res.redirect('/login');  // Redirect to login if no token is found
-        }
-
-        // Verify the token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = await User.findById(decoded.id);  // Find user by ID
-        if (!req.user) {
-            console.log('User not found, redirecting to login');
-            return res.redirect('/login');  // Redirect to login if user not found
-        }
-
-        console.log('Token is valid, proceeding to next middleware');
-        next();  // Proceed to the next middleware or route handler
-    } catch (err) {
-        console.log('Error verifying token:', err);
-        res.redirect('/login');  // Redirect to login on token verification failure
-    }
-};
-
-//post routes
-router.post('/', postController.post_create_post);
-router.get('/create',authMiddleware, postController.post_create_get);
-router.get('/:id',postController.post_details);
-router.delete('/:id',postController.post_delete);
-router.get('/',postController.post_index);
-
+// Protected routes (auth required)
+router.post('/', protect, postController.post_create_post);
+router.get('/create', protect, postController.post_create_get);
+router.get('/auth/:id', protect, postController.post_details_auth);
+router.delete('/:id', protect, postController.post_delete);
+router.get('/', protect, postController.post_index);
 
 module.exports = router;

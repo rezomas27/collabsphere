@@ -12,6 +12,14 @@ const postSchema = new Schema({
         type: String,
         required:true
     },
+    github: {
+        type: String,
+        required: false
+    },
+    demo: {
+        type: String,
+        required: false
+    },
     body:{
         type: String,
         required: true

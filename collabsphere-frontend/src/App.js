@@ -1,3 +1,4 @@
+// App.js
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 import HomePage from "./HomePage";
@@ -8,9 +9,13 @@ import Signup from "./Signup";
 import VerifyEmail from "./VerifyEmail";
 import VerifyInstruction from './VerifyInstruction';
 import Posts from "./Posts";
+import Create from "./Create";
+import Profile from "./Profile";
 import PrivateRoute from "./components/PrivateRoute";
+import Header from "./components/Header";
+import PostDetail from './PostDetail';
+import UserProfile from './UserProfile';
 
-import "./App.css";
 
 const App = () => {
   return (
@@ -23,14 +28,11 @@ const App = () => {
         <Route path="/signup" element={<Signup />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/verify-email" element={<VerifyInstruction />} />
-        <Route 
-          path="/posts" 
-          element={
-            <PrivateRoute>
-              <Posts />
-            </PrivateRoute>
-          } 
-        />
+        <Route path="/posts" element={<PrivateRoute><Posts /></PrivateRoute>}/>
+        <Route path="/posts/create" element={<PrivateRoute><Create /></PrivateRoute>}/>
+        <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>}/>
+        <Route path="/posts/:id" element={<PrivateRoute><PostDetail /></PrivateRoute>} />
+        <Route path="/profile/:username" element={<UserProfile />} />
       </Routes>
     </div>
   );

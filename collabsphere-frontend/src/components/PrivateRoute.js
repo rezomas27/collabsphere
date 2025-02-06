@@ -1,11 +1,11 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 
-const PrivateRoute = ({ children }) => {
-  // Check if user is authenticated (has valid token)
-  const isAuthenticated = document.cookie.includes('token=');
+const PrivateRoute = ({ children, ...props }) => {
+  console.log('Auth check:', document.cookie);
+  const token = document.cookie.includes('token=') || sessionStorage.getItem('auth');
   
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return token ? children : <Navigate to="/login" replace />;
 };
 
 export default PrivateRoute;
