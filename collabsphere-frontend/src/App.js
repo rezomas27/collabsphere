@@ -15,6 +15,9 @@ import PrivateRoute from "./components/PrivateRoute";
 import Header from "./components/Header";
 import PostDetail from './PostDetail';
 import UserProfile from './UserProfile';
+import MyPosts from './MyPosts';
+import EditPost from "./EditPost.js";
+import Messages from "./Messages";
 
 
 const App = () => {
@@ -32,7 +35,10 @@ const App = () => {
         <Route path="/posts/create" element={<PrivateRoute><Create /></PrivateRoute>}/>
         <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>}/>
         <Route path="/posts/:id" element={<PrivateRoute><PostDetail /></PrivateRoute>} />
+        <Route path="/my-posts" element={<PrivateRoute><MyPosts/></PrivateRoute>}/>
+        <Route path="/posts/edit/:id" element={<PrivateRoute><EditPost/></PrivateRoute>}/>
         <Route path="/profile/:username" element={<UserProfile />} />
+        <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
       </Routes>
     </div>
   );

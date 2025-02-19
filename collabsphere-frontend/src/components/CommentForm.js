@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const CommentForm = ({ postId, onCommentAdded }) => {
+const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId prop
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -18,14 +18,15 @@ const CommentForm = ({ postId, onCommentAdded }) => {
         credentials: 'include',
         body: JSON.stringify({
           postId,
-          content: comment
+          content: comment,
+          parentId: parentId || null  // Include parentId in request
         }),
       });
 
       if (!response.ok) throw new Error('Failed to post comment');
       
       const newComment = await response.json();
-      onCommentAdded(newComment);
+      onCommentAdded(newComment.data);  // Make sure to access .data property
       setComment('');
     } catch (error) {
       console.error('Error posting comment:', error);

@@ -1,87 +1,132 @@
-// About.js
 import React from "react";
 import Header from './components/Header';
-import "./App.css";
+import { 
+  FiTarget, 
+  FiUsers, 
+  FiCode, 
+  FiArrowRight, 
+  FiPackage, 
+  FiGitBranch,
+  FiBox
+} from 'react-icons/fi';
 
 function About() {
- return (
-   <div className="min-h-screen bg-gray-900">
-     <div className="bg-gray-900 border-b border-gray-800">
-       <Header />
-     </div>
+  return (
+    <div className="min-h-screen">
+      <Header />
 
-     <div className="max-w-7xl mx-auto px-4 py-12">
-       <div className="bg-gray-800 rounded-xl shadow-xl p-8 border border-gray-700 hover:shadow-2xl transition-all duration-300">
-         <header className="mb-16 text-center">
-           <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400 mb-6">
-             About CollabSphere
-           </h1>
-           <p className="text-xl text-gray-300 leading-relaxed max-w-3xl mx-auto">
-             CollabSphere is a platform designed to bring creators, innovators, and
-             collaborators together. Whether you have an idea that needs support or
-             are looking to join a groundbreaking project, CollabSphere is your
-             launchpad for success.
-           </p>
-         </header>
+      {/* Hero Section - Full Screen */}
+      <div className="relative h-screen bg-gray-900 flex items-center">
+        <div className="absolute inset-0 grid grid-cols-2 -space-x-52 opacity-30">
+          <div className="blur-[106px] h-56 bg-gradient-to-br from-blue-600 to-indigo-400"></div>
+          <div className="blur-[106px] h-32 bg-gradient-to-r from-indigo-600 to-blue-400"></div>
+        </div>
 
-         <main className="space-y-16">
-           <section className="bg-gray-800/50 p-8 rounded-lg border border-gray-700 hover:border-indigo-500/50 transition-colors duration-300">
-             <div className="flex items-center mb-6">
-               <div className="mr-4 text-indigo-400">
-                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                 </svg>
-               </div>
-               <h2 className="text-3xl font-semibold text-white">Our Mission</h2>
-             </div>
-             <p className="text-gray-300 text-lg leading-relaxed">
-               To empower individuals by providing a space where ideas meet action.
-               We strive to foster innovation and collaboration across a diverse
-               range of projects and disciplines.
-             </p>
-           </section>
+        <div className="relative max-w-5xl mx-auto px-4 text-center">
+          <h1 className="text-6xl md:text-7xl font-bold text-white mb-8">
+            Elevating 
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 block mt-2">
+              Digital Innovation
+            </span>
+          </h1>
+          <p className="text-xl md:text-2xl text-gray-300 leading-relaxed max-w-3xl mx-auto">
+            A platform where creators showcase their work, innovators find collaborators, 
+            and great ideas become reality.
+          </p>
+        </div>
+      </div>
 
-           <section className="bg-gray-800/50 p-8 rounded-lg border border-gray-700 hover:border-indigo-500/50 transition-colors duration-300">
-             <div className="flex items-center mb-6">
-               <div className="mr-4 text-indigo-400">
-                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                 </svg>
-               </div>
-               <h2 className="text-3xl font-semibold text-white">Why CollabSphere?</h2>
-             </div>
-             <ul className="space-y-4 text-gray-300 text-lg">
-               <li className="flex items-center">
-                 <svg className="w-6 h-6 mr-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                 </svg>
-                 Connect with passionate individuals worldwide
-               </li>
-               <li className="flex items-center">
-                 <svg className="w-6 h-6 mr-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                 </svg>
-                 Gain hands-on experience by contributing to real projects
-               </li>
-               <li className="flex items-center">
-                 <svg className="w-6 h-6 mr-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                 </svg>
-                 Turn your ideas into reality with the help of collaborators
-               </li>
-             </ul>
-           </section>
-         </main>
-       </div>
-     </div>
+      {/* Content Sections */}
+      <div className="bg-gradient-to-b from-gray-900 to-indigo-900">
+        {/* Mission Section */}
+        <section className="max-w-7xl mx-auto px-4 py-32">
+          <div className="flex items-center justify-center mb-16">
+            <FiTarget className="w-10 h-10 text-blue-400 mr-4" />
+            <h2 className="text-4xl font-bold text-white">Our Mission</h2>
+          </div>
+          <p className="text-gray-300 text-xl leading-relaxed max-w-4xl mx-auto text-center">
+            To create an ecosystem where great projects find their audience, developers find their 
+            perfect collaborations, and innovative ideas find the talent they need to thrive.
+          </p>
+        </section>
 
-     <footer className="bg-gray-800 text-gray-400 mt-12 border-t border-gray-700">
-       <div className="max-w-7xl mx-auto px-4 py-6 text-center">
-         <p>&copy; {new Date().getFullYear()} CollabSphere. All rights reserved.</p>
-       </div>
-     </footer>
-   </div>
- );
+        {/* Core Principles */}
+        <section className="max-w-7xl mx-auto px-4 py-32">
+          <div className="grid md:grid-cols-3 gap-12">
+          {[
+            {
+              icon: <FiBox />, // Changed from FiLayers
+              title: "Project Showcase",
+              description: "A space for completed projects to shine and gain the recognition they deserve."
+            },
+            {
+              icon: <FiUsers />,
+              title: "Meaningful Connections",
+              description: "Connect with developers who share your vision and complement your skills."
+            },
+            {
+              icon: <FiGitBranch />, // Changed from FiGitPull
+              title: "Idea Acceleration",
+              description: "Transform concepts into reality by finding the perfect collaboration match."
+            }
+            ].map((value, index) => (
+              <div key={index} className="group p-8">
+                <div className="text-blue-400 text-3xl mb-6 group-hover:scale-110 transition-transform">
+                  {value.icon}
+                </div>
+                <h3 className="text-2xl font-semibold text-white mb-4">{value.title}</h3>
+                <p className="text-gray-300 text-lg">{value.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Impact Section */}
+        <section className="max-w-7xl mx-auto px-4 py-32">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+            {[
+              { number: "1K+", label: "Projects Launched" },
+              { number: "5K+", label: "Active Creators" },
+              { number: "500+", label: "Collaborations" },
+              { number: "200+", label: "Success Stories" }
+            ].map((stat, index) => (
+              <div key={index} className="text-center group">
+                <div className="text-4xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
+                  {stat.number}
+                </div>
+                <div className="text-gray-400 text-lg">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="max-w-3xl mx-auto px-4 py-32">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-16 text-center">
+            <h2 className="text-4xl font-bold text-white mb-6">Ready to Elevate?</h2>
+            <p className="text-xl text-blue-100 mb-12">
+              Join a community dedicated to taking projects to new heights.
+            </p>
+            <button className="group px-8 py-4 bg-white text-indigo-600 rounded-xl font-medium hover:bg-gray-50 transition-colors inline-flex items-center">
+              Get Started
+              <FiArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        </section>
+
+        {/* Minimal Footer */}
+        <footer className="border-t border-gray-800">
+          <div className="max-w-7xl mx-auto px-4 py-12">
+            <div className="text-center text-gray-400">
+              <p className="text-sm">
+                © {new Date().getFullYear()} Elevara. All rights reserved.
+              </p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
 }
 
 export default About;

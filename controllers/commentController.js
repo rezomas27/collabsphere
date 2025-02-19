@@ -11,8 +11,15 @@ const getPostComments = async (req, res) => {
             post: req.params.postId,
             isReply: false // Only get top-level comments
         })
-        .populate('user', 'userName') // Only get the username from user
-        .sort({ createdAt: -1 }); // Sort by newest first
+        .populate('user', 'userName')
+        .populate({
+            path: 'replies',
+            populate: {
+                path: 'user',
+                select: 'userName'
+            }
+        })
+        .sort({ createdAt: -1 });
 
         res.json(comments);
     } catch (error) {
@@ -29,7 +36,8 @@ const getPostComments = async (req, res) => {
 // @access  Private
 const createComment = async (req, res) => {
     try {
-        const { postId, content } = req.body;
+        const { postId, content, parentId } = req.body;
+        console.log('Received comment data:', { postId, content, parentId }); // Debug log
 
         // Verify post exists
         const post = await Post.findById(postId);
@@ -40,17 +48,28 @@ const createComment = async (req, res) => {
             });
         }
 
+        // If parentId exists, verify parent comment exists
+        if (parentId) {
+            const parentComment = await Comment.findById(parentId);
+            if (!parentComment) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Parent comment not found'
+                });
+            }
+        }
+
         // Create comment object
         const commentData = {
             content,
             user: req.user._id,
-            post: postId
+            post: postId,
+            isReply: !!parentId,
+            parentComment: parentId || null
         };
 
         // Create and save the comment
         const comment = await Comment.create(commentData);
-        
-        // Populate user info before sending response
         await comment.populate('user', 'userName');
 
         res.status(201).json({
@@ -141,9 +160,19 @@ const deleteComment = async (req, res) => {
     }
 };
 
+const getCommentCount = async (req, res) => {
+    try {
+        const count = await Comment.countDocuments({ user: req.params.userId });
+        res.json({ count });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     getPostComments,
     createComment,
     updateComment,
-    deleteComment
+    deleteComment,
+    getCommentCount
 };

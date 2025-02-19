@@ -5,9 +5,11 @@ const { protect } = require('../middleware/authMiddleware');
 const {
     getProfile,
     updateProfile,
-    changePassword
+    changePassword,
+    getUserByUsername
 } = require('../controllers/profileController');
 
+router.get('/user/:username', getUserByUsername); // Add this before protect middleware
 // Apply authentication middleware to all profile routes
 router.use(protect);
 

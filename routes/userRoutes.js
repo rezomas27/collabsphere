@@ -13,5 +13,7 @@ router.get('/verify-email/:token', userController.verify_email);
 
 // Protected routes (require authentication)
 router.get('/myAccount', protect, userController.user_myAccount_get);
+router.get('/me', protect, userController.getCurrentUser);
+router.get('/search', userController.searchUsers);
 
 module.exports = router;

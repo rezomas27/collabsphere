@@ -4,12 +4,12 @@ const userRoutes = require('./routes/userRoutes'); // Import userRoutes
 const postRoutes = require('./routes/postRoutes'); // Import postRoutes
 const profileRoutes = require('./routes/profileRoutes');
 const commentRoutes = require('./routes/commentRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 require('dotenv').config();
 const Post = require('./models/post');  // Add this at the top
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-
 
 
 const app = express();
@@ -43,6 +43,7 @@ app.use('/api/users', userRoutes); // Mount user-related routes
 app.use('/api/posts', postRoutes); // Mount posts router
 app.use('/api/profile', profileRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/messages', messageRoutes);
 
 
 

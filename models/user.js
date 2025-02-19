@@ -32,6 +32,29 @@ const userSchema = new Schema({
     isVerified: { type: Boolean, default: false }, // Email verification status
     emailVerificationToken: { type: String },
     emailVerificationExpires: { type: Date },
+    bio: {
+        type: String,
+        default: ''
+    },
+    skills: [{
+        type: String
+    }],
+    github: {
+        type: String,
+        default: ''
+    },
+    linkedin: {
+        type: String,
+        default: ''
+    },
+    website: {
+        type: String,
+        default: ''
+    },
+    location: {
+        type: String,
+        default: ''
+    }
 }, {timestamps:true});
 
 //get the token

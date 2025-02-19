@@ -29,7 +29,10 @@ const postSchema = new Schema({
         ref: 'User',
         required: true
     },
-
+    likes: [{
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    }]
 }, {timestamps:true});
 
 const Post = mongoose.model('Post',postSchema);

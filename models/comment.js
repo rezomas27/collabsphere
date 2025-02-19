@@ -1,11 +1,9 @@
-// models/comment.js
 const mongoose = require('mongoose');
 
 const commentSchema = new mongoose.Schema({
     content: {
         type: String,
-        required: [true, 'Comment content is required'],
-        trim: true
+        required: true
     },
     user: {
         type: mongoose.Schema.Types.ObjectId,
@@ -17,18 +15,26 @@ const commentSchema = new mongoose.Schema({
         ref: 'Post',
         required: true
     },
+    isReply: {
+        type: Boolean,
+        default: false
+    },
     parentComment: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Comment',
         default: null
-    },
-    isReply: {
-        type: Boolean,
-        default: false
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-// Export the model directly
+// Virtual for replies
+commentSchema.virtual('replies', {
+    ref: 'Comment',
+    localField: '_id',
+    foreignField: 'parentComment'
+});
+
 module.exports = mongoose.model('Comment', commentSchema);

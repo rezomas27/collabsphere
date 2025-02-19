@@ -29,12 +29,16 @@ const user_login_post = async (req, res) => {
 
     // Generate JWT token
     const token = await user.jwtGenerateToken();
+    const expiresIn = process.env.EXPIRE_TOKEN || '1h';
+    const maxAge = expiresIn.includes('h') ? 
+    parseInt(expiresIn) * 60 * 60 * 1000 : 
+    parseInt(expiresIn) * 1000;
     
     res
       .status(200)
       .cookie('token', token, {
         httpOnly: true,
-        maxAge: 86400000 // 24 hours in milliseconds
+        maxAge: maxAge 
       })
       .json({
         success: true,
@@ -44,26 +48,6 @@ const user_login_post = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-};
-
-
-
-const generateToken = async (user, statusCode, res) => {
-  const token = await user.jwtGenerateToken();
-  console.log('Generated Token:', token); // Add this line for debugging
-
-  // Parse expiration time from environment variable and convert to milliseconds
-  const expireToken = parseInt(process.env.EXPIRE_TOKEN) * 1000 || 3600 * 1000; // Default expiry time in milliseconds
-
-  const options = {
-      httpOnly: true,
-      expires: new Date(Date.now() + expireToken) // Convert seconds to milliseconds
-  };
-
-  res
-      .status(statusCode)
-      .cookie('token', token, options)
-      .redirect('/posts');
 };
 
 const user_signup_get = (req, res) => {
@@ -123,8 +107,6 @@ const user_signup_post = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
-
 
 const sendVerificationEmail = async (email, token) => {
   const transporter = nodemailer.createTransport({
@@ -186,10 +168,6 @@ const verify_email = async (req, res) => {
   }
 };
 
-
-
-  
-
 const user_myAccount_get = (req, res) => {
     const user = req.user; // Get the authenticated user from the middleware
     if (user) {
@@ -199,11 +177,38 @@ const user_myAccount_get = (req, res) => {
     }
 };
 
+// Add to userController.js
+const searchUsers = async (req, res) => {
+  try {
+      const username = req.query.username;
+      const users = await User.find({
+          userName: { $regex: username, $options: 'i' }
+      })
+      .select('userName _id')
+      .limit(5);
+      
+      res.json(users);
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+};
+
+const getCurrentUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password');
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching user data' });
+    }
+};
+
 module.exports = {
     user_login_get,
     user_login_post,
     user_signup_get,
     user_signup_post,
     user_myAccount_get,
-    verify_email
+    verify_email,
+    searchUsers,
+    getCurrentUser
 };
