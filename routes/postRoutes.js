@@ -9,6 +9,7 @@ router.get('/browse', postController.browse_posts);
 router.get('/view/:id', postController.post_details);
 router.get('/user/me', protect, postController.getUserPosts); // Add this new route
 router.get('/user/:userId', postController.getUserPosts);
+router.get('/:id/likes', protect, postController.getLikes);  // Add this new route
 
 
 // Protected routes (auth required)

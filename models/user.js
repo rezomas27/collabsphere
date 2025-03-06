@@ -32,6 +32,9 @@ const userSchema = new Schema({
     isVerified: { type: Boolean, default: false }, // Email verification status
     emailVerificationToken: { type: String },
     emailVerificationExpires: { type: Date },
+    emailVerificationCode: {
+        type: String
+    },
     bio: {
         type: String,
         default: ''
@@ -54,7 +57,17 @@ const userSchema = new Schema({
     location: {
         type: String,
         default: ''
-    }
+    },
+    passwordChangeCode: { type: String },
+    passwordChangeCodeExpires: { type: Date },
+    profilePicture: {
+        type: String, // Will store base64 string
+        default: ''
+    },
+    socialLinks: [{
+        platform: String,
+        url: String
+    }],
 }, {timestamps:true});
 
 //get the token

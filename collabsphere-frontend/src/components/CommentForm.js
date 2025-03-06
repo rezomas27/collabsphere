@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import DOMPurify from 'dompurify';
+import axios from '../utils/axios';
 
 const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId prop
   const [comment, setComment] = useState('');
@@ -8,25 +10,17 @@ const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId
     e.preventDefault();
     if (!comment.trim()) return;
 
+    const sanitizedComment = DOMPurify.sanitize(comment.trim());
+    
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/comments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          postId,
-          content: comment,
-          parentId: parentId || null  // Include parentId in request
-        }),
+      const response = await axios.post('/api/comments', {
+        postId,
+        content: sanitizedComment,
+        parentId: parentId || null
       });
 
-      if (!response.ok) throw new Error('Failed to post comment');
-      
-      const newComment = await response.json();
-      onCommentAdded(newComment.data);  // Make sure to access .data property
+      onCommentAdded(response.data.data);
       setComment('');
     } catch (error) {
       console.error('Error posting comment:', error);
@@ -93,12 +87,8 @@ const Comments = ({ postId }) => {
   React.useEffect(() => {
     const fetchComments = async () => {
       try {
-        const response = await fetch(`/api/comments/${postId}`, {
-          credentials: 'include'
-        });
-        if (!response.ok) throw new Error('Failed to fetch comments');
-        const data = await response.json();
-        setComments(data);
+        const response = await axios.get(`/api/comments/post/${postId}`);
+        setComments(response.data);
       } catch (err) {
         setError(err.message);
       } finally {

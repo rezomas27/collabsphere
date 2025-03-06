@@ -4,7 +4,7 @@ import Header from './components/Header';
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
-    <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+    <div className="animate-spin rounded-full h-10 w-10 border-4 border-cyan-600 border-t-transparent"></div>
   </div>
 );
 
@@ -17,6 +17,7 @@ const Posts = () => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('recent'); 
+  const [error, setError] = useState(null);
 
 
   const postTypes = [
@@ -93,54 +94,63 @@ const Posts = () => {
     }
   };
 
-  useEffect(() => {
-    fetchCurrentUser();
-    
-    const fetchPosts = async () => {
-      try {
-        const response = await fetch('/api/posts', {
-          credentials: 'include'
-        });
-        
+  const fetchPosts = async () => {
+    try {
+      const response = await fetch('/api/posts/browse', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
         if (response.status === 401) {
           window.location.href = '/login';
           return;
         }
-
-        const data = await response.json();
-        if (!Array.isArray(data)) return setPosts([]);
-
-        const postsWithComments = await Promise.all(
-          data.map(async (post) => {
-              try {
-                  const commentsResponse = await fetch(`/api/comments/post/${post._id}`, {
-                      credentials: 'include'
-                  });
-                  const comments = await commentsResponse.json();
-                  return { 
-                      ...post, 
-                      commentCount: Array.isArray(comments) ? comments.length : 0,
-                      likeCount: post.likes ? post.likes.length : 0
-                  };
-              } catch {
-                  return { ...post, commentCount: 0, likeCount: 0 };
-              }
-          })
-        );
-        setPosts(postsWithComments);
-        
-        if (currentUserId) {
-          setLikedPosts(new Set(postsWithComments.filter(post => 
-            post.likes && post.likes.includes(currentUserId)
-          ).map(post => post._id)));
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        setPosts([]);
-      } finally {
-        setLoading(false);
+        throw new Error('Failed to fetch posts');
       }
-    };
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to fetch posts');
+      }
+
+      const data = result.data;
+      if (!Array.isArray(data)) {
+        setError('Invalid response format');
+        setPosts([]);
+        return;
+      }
+
+      const postsWithComments = await Promise.all(
+        data.map(async (post) => {
+          try {
+            const commentsResponse = await fetch(`/api/comments/post/${post._id}`, {
+              credentials: 'include'
+            });
+            const comments = await commentsResponse.json();
+            return { 
+              ...post, 
+              commentCount: Array.isArray(comments) ? comments.length : 0,
+              likeCount: post.likes ? post.likes.length : 0
+            };
+          } catch {
+            return { ...post, commentCount: 0, likeCount: 0 };
+          }
+        })
+      );
+      setPosts(postsWithComments);
+      setError(null);
+    } catch (error) {
+      console.error('Error:', error);
+      setError(error.message || 'Failed to load posts');
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCurrentUser();
     
     fetchPosts();
     
@@ -168,21 +178,17 @@ const Posts = () => {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-600">
-        <Header />
-      </div>
-
+    <div className="min-h-screen bg-slate-900">
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-white">Recent Posts</h1>
+          <h1 className="text-3xl font-bold text-white">Explore Projects</h1>
           <div className="flex items-center gap-4">
-            <div className="bg-gray-800 rounded-lg p-1 flex">
+            <div className="bg-blue-900/40 backdrop-blur-sm rounded-lg p-1 flex">
               <button
                 onClick={() => setViewMode('grid')}
                 className={`px-4 py-2 rounded-lg transition-colors ${
                   viewMode === 'grid' 
-                    ? 'bg-indigo-600 text-white' 
+                    ? 'bg-cyan-600 text-white' 
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -194,7 +200,7 @@ const Posts = () => {
                 onClick={() => setViewMode('list')}
                 className={`px-4 py-2 rounded-lg transition-colors ${
                   viewMode === 'list' 
-                    ? 'bg-indigo-600 text-white' 
+                    ? 'bg-cyan-600 text-white' 
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -205,7 +211,7 @@ const Posts = () => {
             </div>
             <Link 
               to="/posts/create"
-              className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-all duration-200 flex items-center space-x-2"
+              className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-200 flex items-center space-x-2"
             >
               <span>Create New Post</span>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,7 +229,7 @@ const Posts = () => {
               placeholder="Search posts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+              className="w-full px-4 py-2 bg-blue-900/30 backdrop-blur-sm border border-blue-700/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
             />
             <svg 
               className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" 
@@ -245,8 +251,8 @@ const Posts = () => {
                   onClick={() => setSelectedType(type.value)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
                     ${selectedType === type.value
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-blue-900/40 backdrop-blur-sm text-gray-300 hover:bg-blue-800/40'
                     }`}
                 >
                   {type.label}
@@ -255,11 +261,11 @@ const Posts = () => {
             </div>
 
             {/* Vertical Divider */}
-            <div className="h-8 w-px bg-gray-700"></div>
+            <div className="h-8 w-px bg-blue-700/50"></div>
 
             {/* Sort Options */}
             <div className="flex items-center gap-2">
-              <span className="text-gray-400">Sort by:</span>
+              <span className="text-gray-300">Sort by:</span>
               <div className="flex gap-2">
                 {sortOptions.map((option) => (
                   <button
@@ -267,8 +273,8 @@ const Posts = () => {
                     onClick={() => setSortBy(option.value)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
                       ${sortBy === option.value
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-blue-900/40 backdrop-blur-sm text-gray-300 hover:bg-blue-800/40'
                       }`}
                   >
                     <div className="flex items-center gap-2">
@@ -303,11 +309,11 @@ const Posts = () => {
             {filteredPosts.map((post) => (
               <div 
                 key={post._id}
-                className={`bg-gray-800 rounded-xl p-6 
-                  border border-gray-700 
+                className={`bg-blue-900/30 backdrop-blur-sm rounded-xl p-6 
+                  border border-blue-700/50 
                   ${viewMode === 'grid' 
-                    ? 'hover:shadow-lg transition-all duration-300 hover:-translate-y-1' 
-                    : 'hover:shadow-lg transition-all duration-300'
+                    ? 'hover:shadow-xl transition-all duration-300 hover:-translate-y-1' 
+                    : 'hover:shadow-xl transition-all duration-300'
                   }
                   relative
                 `}
@@ -315,16 +321,20 @@ const Posts = () => {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm text-gray-400">Posted by</span>
+                      <span className="text-sm text-gray-300">Posted by</span>
                       <Link 
                         to={`/profile/${post.user?.userName}`}
-                        className="text-indigo-400 font-medium hover:text-indigo-300 transition-colors"
+                        className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors"
                       >
                         {post.user ? post.user.userName : 'Unknown User'}
                       </Link>
                     </div>
                     <h2 className="text-xl font-bold text-white">{post.title}</h2>
-                    <span className={`inline-block px-3 py-1 text-sm rounded-full ${post.type === 'showcase' ? 'bg-purple-600' : post.type === 'seeking-contributors' ? 'bg-orange-600' : post.type === 'looking-to-join' ? 'bg-green-600' : 'bg-indigo-600'} text-white mt-2`}>
+                    <span className={`inline-block px-3 py-1 text-sm rounded-full ${
+                      post.type === 'showcase' ? 'bg-teal-600' : 
+                      post.type === 'seeking-contributors' ? 'bg-cyan-600' : 
+                      post.type === 'looking-to-join' ? 'bg-blue-600' : 'bg-cyan-600'
+                    } text-white mt-2`}>
                       {post.type}
                     </span>
                   </div>
@@ -332,14 +342,14 @@ const Posts = () => {
 
                 <p className="text-gray-300 mb-4 line-clamp-3">{post.body}</p>
                 
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-blue-700/50">
                   <div className="flex gap-4">
                     {post.github && (
                       <a 
                         href={post.github}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                        className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
                         onClick={e => e.stopPropagation()}
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -353,7 +363,7 @@ const Posts = () => {
                         href={post.demo}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                        className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
                         onClick={e => e.stopPropagation()}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -366,7 +376,7 @@ const Posts = () => {
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center text-gray-400">
+                    <div className="flex items-center text-gray-300">
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                       </svg>
@@ -382,7 +392,7 @@ const Posts = () => {
                         handleLike(post._id);
                       }}
                       className={`flex items-center space-x-1 ${
-                        likedPosts.has(post._id) ? 'text-red-500' : 'text-gray-400'
+                        likedPosts.has(post._id) ? 'text-red-500' : 'text-gray-300'
                       } hover:text-red-500 transition-colors z-10`}
                     >
                       <svg
@@ -403,7 +413,7 @@ const Posts = () => {
 
                     <Link 
                       to={`/posts/${post._id}`}
-                      className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors gap-2 z-10"
+                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all duration-200 gap-2 z-10"
                       onClick={e => e.stopPropagation()}
                     >
                       Read More

@@ -5,17 +5,27 @@ const User = require('../models/user')
 // Public route to browse posts
 const browse_posts = async (req, res) => {
     try {
+        console.log('Fetching posts for browse...');
         const posts = await Post.find()
             .sort({createdAt: -1})
-            .populate('user', 'userName')
-            .select('-comments');
+            .populate('user', 'userName firstName lastName')
+            .select('-comments')
+            .lean(); // Convert to plain JavaScript objects
         
-        console.log('Posts with user data:', posts); // Debug log
+        console.log(`Found ${posts.length} posts`);
         
-        res.json(posts);
+        // Always return a success response, even with empty data
+        res.json({
+            success: true,
+            data: posts || []
+        });
     } catch (err) {
         console.error('Error in browse_posts:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching posts',
+            error: err.message 
+        });
     }
 }
 
@@ -154,7 +164,7 @@ const post_update = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized to update this post' });
         }
   
-        const { title, body, type, github, demo } = req.body;
+        const { title, body, type, github, demo, projectUrl } = req.body;
   
         if (!title || !body || !type) {
             return res.status(400).json({ 
@@ -167,6 +177,7 @@ const post_update = async (req, res) => {
         post.type = type;
         post.github = github || '';
         post.demo = demo || '';
+        post.projectUrl = projectUrl || '';
   
         const updatedPost = await post.save();
         res.json(updatedPost);
@@ -203,6 +214,29 @@ const toggleLike = async (req, res) => {
     }
 };
 
+const getLikes = async (req, res) => {
+    try {
+        const post = await Post.findById(req.params.id);
+        
+        if (!post) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        // Get users who liked the post
+        const users = await User.find({ _id: { $in: post.likes } })
+            .select('userName firstName lastName');
+        
+        res.json({
+            count: post.likes.length,
+            users: users,
+            isLiked: post.likes.includes(req.user._id)
+        });
+    } catch (err) {
+        console.error('Error getting post likes:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 
 module.exports = {
     browse_posts,    // Public
@@ -215,4 +249,5 @@ module.exports = {
     getUserPosts,
     post_update,
     toggleLike,
+    getLikes
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import { 
   FiMail, 
@@ -19,9 +19,11 @@ const ProfileStats = ({ label, value }) => (
 
 const UserProfile = () => {
   const { username } = useParams();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const currentUser = JSON.parse(localStorage.getItem('user')); // Get current user
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -64,6 +66,14 @@ const UserProfile = () => {
     fetchUserData();
   }, [username]);
 
+  const handleMessageClick = () => {
+    if (!document.cookie.includes('token=') && !sessionStorage.getItem('auth')) {
+      navigate('/login');
+      return;
+    }
+    navigate(`/messages/${user._id}`);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900">
@@ -85,17 +95,24 @@ const UserProfile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
-      <Header />
       
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-gray-700/50">
           {/* Profile Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-4">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center">
-                <span className="text-3xl text-white font-bold">
-                  {user.firstName?.[0]}{user.lastName?.[0]}
-                </span>
+              <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center">
+                {user.profilePicture ? (
+                  <img 
+                    src={user.profilePicture} 
+                    alt={`${user.firstName} ${user.lastName}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl text-white font-bold">
+                    {user.firstName?.[0]}{user.lastName?.[0]}
+                  </span>
+                )}
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-white">
@@ -105,11 +122,14 @@ const UserProfile = () => {
               </div>
             </div>
             
-            <button
-              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
-            >
-              <FiMessageSquare className="mr-2" /> Message
-            </button>
+            {document.cookie.includes('token=') || sessionStorage.getItem('auth') ? (
+              <button
+                onClick={handleMessageClick}
+                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+              >
+                <FiMessageSquare className="mr-2" /> Message
+              </button>
+            ) : null}
           </div>
 
           {/* About Section */}
@@ -181,9 +201,18 @@ const UserProfile = () => {
           <div className="bg-gray-700/20 rounded-xl p-6 mb-6">
             <h3 className="text-xl font-semibold text-white mb-4">Activity Stats</h3>
             <div className="grid grid-cols-3 gap-4">
-              <ProfileStats label="Projects" value={user.stats?.posts || 0} />
-              <ProfileStats label="Collaborations" value={user.stats?.collaborations || 0} />
-              <ProfileStats label="Contributions" value={user.stats?.contributions || 0} />
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-white">{user.stats?.posts || 0}</div>
+                <div className="text-gray-300">Projects</div>
+              </div>
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-white">{user.stats?.collaborations || 0}</div>
+                <div className="text-gray-300">Collaborations</div>
+              </div>
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-white">{user.stats?.contributions || 0}</div>
+                <div className="text-gray-300">Contributions</div>
+              </div>
             </div>
           </div>
 

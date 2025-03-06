@@ -219,9 +219,7 @@ const PostDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-600">
-        <Header />
-      </div>
+
 
       <div className="max-w-4xl mx-auto px-6 py-12">
         <button

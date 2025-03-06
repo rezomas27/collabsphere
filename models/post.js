@@ -6,11 +6,13 @@ const Schema = mongoose.Schema;
 const postSchema = new Schema({
     title: {
         type: String,
-        required:true
+        required: true
     },
-    type:{
+    type: {
         type: String,
-        required:true
+        required: true,
+        enum: ['showcase', 'seeking-contributors', 'looking-to-join', 'in-development', 'project-idea', 'other'],
+        default: 'showcase'
     },
     github: {
         type: String,
@@ -20,11 +22,11 @@ const postSchema = new Schema({
         type: String,
         required: false
     },
-    body:{
+    body: {
         type: String,
         required: true
     },
-    user:{
+    user: {
         type: Schema.Types.ObjectId,
         ref: 'User',
         required: true
@@ -33,8 +35,8 @@ const postSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'User'
     }]
-}, {timestamps:true});
+}, {timestamps: true});
 
-const Post = mongoose.model('Post',postSchema);
+const Post = mongoose.model('Post', postSchema);
 
-module.exports=Post;
+module.exports = Post;

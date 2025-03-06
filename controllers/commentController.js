@@ -7,6 +7,7 @@ const Post = require('../models/post');     // Changed from './models/Post'
 // @access  Public
 const getPostComments = async (req, res) => {
     try {
+        console.log('Fetching comments for post:', req.params.postId);
         const comments = await Comment.find({ 
             post: req.params.postId,
             isReply: false // Only get top-level comments
@@ -19,8 +20,10 @@ const getPostComments = async (req, res) => {
                 select: 'userName'
             }
         })
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .lean();
 
+        console.log('Found comments count:', comments.length);
         res.json(comments);
     } catch (error) {
         console.error('Error in getPostComments:', error);
@@ -37,11 +40,28 @@ const getPostComments = async (req, res) => {
 const createComment = async (req, res) => {
     try {
         const { postId, content, parentId } = req.body;
-        console.log('Received comment data:', { postId, content, parentId }); // Debug log
+        console.log('Creating comment:', { postId, content, parentId });
+
+        if (!content?.trim()) {
+            console.log('Comment content is empty');
+            return res.status(400).json({
+                success: false,
+                message: 'Comment content is required'
+            });
+        }
+
+        if (!postId) {
+            console.log('Post ID is missing');
+            return res.status(400).json({
+                success: false,
+                message: 'Post ID is required'
+            });
+        }
 
         // Verify post exists
         const post = await Post.findById(postId);
         if (!post) {
+            console.log('Post not found:', postId);
             return res.status(404).json({
                 success: false,
                 message: 'Post not found'
@@ -52,6 +72,7 @@ const createComment = async (req, res) => {
         if (parentId) {
             const parentComment = await Comment.findById(parentId);
             if (!parentComment) {
+                console.log('Parent comment not found:', parentId);
                 return res.status(404).json({
                     success: false,
                     message: 'Parent comment not found'
@@ -61,20 +82,25 @@ const createComment = async (req, res) => {
 
         // Create comment object
         const commentData = {
-            content,
+            content: content.trim(),
             user: req.user._id,
             post: postId,
             isReply: !!parentId,
             parentComment: parentId || null
         };
 
-        // Create and save the comment
+        console.log('Creating comment with data:', commentData);
         const comment = await Comment.create(commentData);
-        await comment.populate('user', 'userName');
+        
+        // Populate user data
+        const populatedComment = await Comment.findById(comment._id)
+            .populate('user', 'userName')
+            .lean();
 
+        console.log('Comment created successfully:', populatedComment);
         res.status(201).json({
             success: true,
-            data: comment
+            data: populatedComment
         });
     } catch (error) {
         console.error('Error in createComment:', error);
@@ -90,9 +116,11 @@ const createComment = async (req, res) => {
 // @access  Private
 const updateComment = async (req, res) => {
     try {
+        console.log('Updating comment:', req.params.commentId);
         const comment = await Comment.findById(req.params.commentId);
 
         if (!comment) {
+            console.log('Comment not found:', req.params.commentId);
             return res.status(404).json({
                 success: false,
                 message: 'Comment not found'
@@ -101,14 +129,16 @@ const updateComment = async (req, res) => {
 
         // Verify comment belongs to user
         if (comment.user.toString() !== req.user._id.toString()) {
+            console.log('Unauthorized update attempt');
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to update this comment'
             });
         }
 
-        comment.content = req.body.content;
+        comment.content = req.body.content.trim();
         await comment.save();
+        console.log('Comment updated successfully');
 
         res.json({
             success: true,
@@ -128,9 +158,11 @@ const updateComment = async (req, res) => {
 // @access  Private
 const deleteComment = async (req, res) => {
     try {
+        console.log('Deleting comment:', req.params.commentId);
         const comment = await Comment.findById(req.params.commentId);
 
         if (!comment) {
+            console.log('Comment not found:', req.params.commentId);
             return res.status(404).json({
                 success: false,
                 message: 'Comment not found'
@@ -139,6 +171,7 @@ const deleteComment = async (req, res) => {
 
         // Verify comment belongs to user
         if (comment.user.toString() !== req.user._id.toString()) {
+            console.log('Unauthorized delete attempt');
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this comment'
@@ -146,6 +179,7 @@ const deleteComment = async (req, res) => {
         }
 
         await comment.deleteOne();
+        console.log('Comment deleted successfully');
 
         res.json({
             success: true,
@@ -162,9 +196,12 @@ const deleteComment = async (req, res) => {
 
 const getCommentCount = async (req, res) => {
     try {
+        console.log('Getting comment count for user:', req.params.userId);
         const count = await Comment.countDocuments({ user: req.params.userId });
+        console.log('Comment count:', count);
         res.json({ count });
     } catch (err) {
+        console.error('Error in getCommentCount:', err);
         res.status(500).json({ error: err.message });
     }
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
+import axios from './utils/axios';
 
 const EditPost = () => {
   const { id } = useParams();
@@ -18,16 +19,9 @@ const EditPost = () => {
   useEffect(() => {
     const fetchPost = async () => {
       try {
-        const response = await fetch(`/api/posts/${id}`, {
-          credentials: 'include'
-        });
+        const response = await axios.get(`/api/posts/${id}`);
+        const data = response.data;
         
-        if (response.status === 401) {
-          navigate('/login');
-          return;
-        }
-
-        const data = await response.json();
         if (!data) {
           setError('Post not found');
           return;
@@ -54,23 +48,13 @@ const EditPost = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`/api/posts/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
+      const response = await axios.put(`/api/posts/${id}`, formData);
+      if (response.data) {
         navigate('/my-posts');
-      } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to update post');
       }
     } catch (err) {
-      setError('Failed to update post');
+      const errorMessage = err.response?.data?.message || 'Failed to update post';
+      setError(errorMessage);
       console.error(err);
     }
   };

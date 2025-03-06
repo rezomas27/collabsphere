@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import Header from './components/Header';
+import axios from './utils/axios';
+import { debounce } from 'lodash';
 import { 
   FiEdit2, 
   FiLogOut, 
@@ -12,13 +12,16 @@ import {
   FiLinkedin, 
   FiGlobe, 
   FiMapPin, 
-  FiSettings 
+  FiSettings,
+  FiAnchor,
+  FiUpload,
+  FiCamera
 } from 'react-icons/fi';
 
 // LoadingSpinner component
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center min-h-screen">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
   </div>
 );
 
@@ -36,7 +39,10 @@ const Profile = () => {
     github: '',
     linkedin: '',
     website: '',
-    location: ''
+    location: '',
+    profilePicture: '',
+    email: '',
+    socialLinks: []
   });
 
   useEffect(() => {
@@ -53,57 +59,125 @@ const Profile = () => {
         github: profile.github || '',
         linkedin: profile.linkedin || '',
         website: profile.website || '',
-        location: profile.location || ''
+        location: profile.location || '',
+        profilePicture: profile.profilePicture || '',
+        email: profile.email || '',
+        socialLinks: profile.socialLinks || []
       });
     }
   }, [profile]);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async (retryCount = 0) => {
+    const maxRetries = 3;
+    const retryDelay = 2000;
+
     try {
-        setError(''); // Clear any existing errors
-        const [profileRes, postsRes] = await Promise.all([
-            axios.get('/api/profile/me', { withCredentials: true }),
-            axios.get('/api/posts/user/me', { withCredentials: true })
-        ]);
-        
-        console.log('Profile response:', profileRes.data);
-        console.log('Posts response:', postsRes.data);
+      setError('');
+      const profileRes = await fetch('/api/profile/me', { 
+        credentials: 'include'
+      });
 
-        if (profileRes.data?.data) {
-            setProfile({
-                ...profileRes.data.data,
-                recentPosts: postsRes.data || [] // Use empty array as fallback
-            });
-        } else {
-            setError('No profile data received');
+      if (!profileRes.ok) {
+        if (profileRes.status === 401) {
+          navigate('/login', { replace: true });
+          return;
         }
+        throw new Error('Failed to fetch profile');
+      }
+
+      const profileData = await profileRes.json();
+      
+      // Fetch user's posts
+      const postsRes = await fetch('/api/posts/user/me', { 
+        credentials: 'include'
+      });
+
+      if (!postsRes.ok) {
+        throw new Error('Failed to fetch user posts');
+      }
+
+      const postsData = await postsRes.json();
+
+      if (profileData?.data) {
+        setProfile({
+          ...profileData.data,
+          recentPosts: postsData || []
+        });
+        setError('');
+      } else {
+        throw new Error('Invalid profile data received');
+      }
     } catch (error) {
-        console.error('Profile fetch error:', error);
-        const errorMessage = error.response?.data?.message || 'Failed to load profile';
-        setError(errorMessage);
-        if (error.response?.status === 401) {
-            navigate('/login');
-        }
+      console.error('Profile fetch error:', error);
+      if (error.message === 'Failed to fetch' && retryCount < maxRetries) {
+        console.log(`Network error. Retrying in ${retryDelay}ms...`);
+        setTimeout(() => fetchProfile(retryCount + 1), retryDelay * (retryCount + 1));
+        return;
+      }
+      setError(error.message || 'Failed to load profile. Please try again later.');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  }, [navigate]);
 
+  // Debounce the fetch function
+  const debouncedFetchProfile = useCallback(
+    debounce(() => fetchProfile(), 1000),
+    [fetchProfile]
+  );
+
+  useEffect(() => {
+    debouncedFetchProfile();
+    return () => debouncedFetchProfile.cancel();
+  }, [debouncedFetchProfile]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    setError(''); // Clear any existing errors
+    setError('');
+    
     try {
-      const response = await axios.put('/api/profile/me', editForm, {
-        withCredentials: true
+      const updateData = {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        bio: editForm.bio,
+        skills: editForm.skills,
+        github: editForm.github,
+        linkedin: editForm.linkedin,
+        website: editForm.website,
+        location: editForm.location,
+        email: editForm.email,
+        socialLinks: editForm.socialLinks,
+        profilePicture: editForm.profilePicture
+      };
+      
+      const response = await fetch('http://localhost:3000/api/profile/me', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(updateData)
       });
       
-      if (response.data?.data) {
-        setProfile(response.data.data);
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+      
+      const data = await response.json();
+      
+      if (data?.data) {
+        setProfile(prevProfile => ({
+          ...prevProfile,
+          ...data.data
+        }));
         setIsEditing(false);
+        setError('Profile updated successfully!');
+      } else {
+        throw new Error('Invalid response data format');
       }
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to update profile');
+      console.error('Update error:', error);
+      setError(error.message || 'Failed to update profile. Please try again.');
     }
   };
 
@@ -129,27 +203,115 @@ const Profile = () => {
   };
 
   const handleLogout = async () => {
+    // Start client-side cleanup immediately
+    console.log('Starting logout...');
+    sessionStorage.clear();
+    localStorage.clear();
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    
+    // Navigate to home page immediately
+    navigate('/');
+
+    // Perform server-side logout in the background
     try {
-      await axios.post('/api/auth/logout', {}, { withCredentials: true });
-      // Clear all auth-related data
-      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      sessionStorage.removeItem('auth');
-      localStorage.removeItem('auth');
-      navigate('/');
+      const csrfResponse = await axios.get('/api/csrf-token', {
+        withCredentials: true,
+        timeout: 1000 // 1 second timeout
+      });
+      
+      if (csrfResponse.data.token) {
+        await axios.post('/api/users/logout', {}, {
+          withCredentials: true,
+          headers: {
+            'X-CSRF-Token': csrfResponse.data.token,
+            'Content-Type': 'application/json'
+          },
+          timeout: 1000 // 1 second timeout
+        });
+      }
     } catch (error) {
-      console.error('Logout error:', error);
-      setError('Failed to logout. Please try again.');
+      console.error('Background logout error:', error.message);
     }
+  };
+
+  const handleProfilePictureUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const formData = new FormData();
+        formData.append('profilePicture', file);
+
+        const response = await axios.post('/api/profile/upload-picture', formData, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+
+        if (response.data?.url) {
+          setEditForm(prev => ({
+            ...prev,
+            profilePicture: response.data.url
+          }));
+        }
+      } catch (error) {
+        setError('Failed to upload profile picture');
+      }
+    }
+  };
+
+  const handleSocialLinkChange = (index, field, value) => {
+    setEditForm(prev => {
+      const newSocialLinks = [...prev.socialLinks];
+      newSocialLinks[index] = { ...newSocialLinks[index], [field]: value };
+      return { ...prev, socialLinks: newSocialLinks };
+    });
+  };
+
+  const addSocialLink = () => {
+    setEditForm(prev => ({
+      ...prev,
+      socialLinks: [...prev.socialLinks, { platform: '', url: '' }]
+    }));
+  };
+
+  const removeSocialLink = (index) => {
+    setEditForm(prev => ({
+      ...prev,
+      socialLinks: prev.socialLinks.filter((_, i) => i !== index)
+    }));
   };
 
   // Profile Header Component
   const ProfileHeader = () => (
     <div className="flex items-center justify-between mb-8">
       <div className="flex items-center space-x-4">
-        <div className="w-20 h-20 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center">
-          <span className="text-3xl text-white font-bold">
-            {profile?.firstName?.[0]}{profile?.lastName?.[0]}
-          </span>
+        <div className="relative">
+          <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center">
+            {profile?.profilePicture ? (
+              <img 
+                src={profile.profilePicture} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-3xl text-white font-bold">
+                {profile?.firstName?.[0]}{profile?.lastName?.[0]}
+              </span>
+            )}
+          </div>
+          {isEditing && (
+            <label className="absolute bottom-0 right-0 w-8 h-8 bg-cyan-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-cyan-500 transition-colors">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleProfilePictureUpload}
+                className="hidden"
+              />
+              <FiCamera className="text-white" />
+            </label>
+          )}
         </div>
         <div>
           <h1 className="text-3xl font-bold text-white">
@@ -162,7 +324,7 @@ const Profile = () => {
       <div className="flex space-x-3">
         <button
           onClick={() => setIsEditing(!isEditing)}
-          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+          className="flex items-center px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors"
         >
           <FiEdit2 className="mr-2" /> Edit Profile
         </button>
@@ -179,8 +341,7 @@ const Profile = () => {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
-      <Header />
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-blue-900">
       
       <div className="max-w-6xl mx-auto px-4 py-8">
         {error && (
@@ -190,62 +351,62 @@ const Profile = () => {
         )}
 
         {profile && (
-          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-gray-700/50">
+          <div className="bg-blue-900/30 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-blue-700/50">
             <ProfileHeader />
 
             {isEditing ? (
               <form onSubmit={handleUpdate} className="mt-6 space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       First Name
                     </label>
                     <input
                       type="text"
                       value={editForm.firstName}
                       onChange={e => setEditForm({...editForm, firstName: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Last Name
                     </label>
                     <input
                       type="text"
                       value={editForm.lastName}
                       onChange={e => setEditForm({...editForm, lastName: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Bio
                   </label>
                   <textarea
                     value={editForm.bio}
                     onChange={e => setEditForm({...editForm, bio: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     rows="4"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Skills (Press Enter to add)
                   </label>
                   <input
                     type="text"
                     onKeyDown={handleSkillInput}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white mb-2"
+                    className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white mb-2"
                   />
                   <div className="flex flex-wrap gap-2">
                     {editForm.skills.map((skill, index) => (
                       <span
                         key={index}
-                        className="px-3 py-1 bg-indigo-600 text-white rounded-full flex items-center"
+                        className="px-3 py-1 bg-cyan-600 text-white rounded-full flex items-center"
                       >
                         {skill}
                         <button
@@ -262,51 +423,101 @@ const Profile = () => {
 
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       GitHub Profile
                     </label>
                     <input
                       type="text"
                       value={editForm.github}
                       onChange={e => setEditForm({...editForm, github: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       LinkedIn Profile
                     </label>
                     <input
                       type="text"
                       value={editForm.linkedin}
                       onChange={e => setEditForm({...editForm, linkedin: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Website
                     </label>
                     <input
                       type="text"
                       value={editForm.website}
                       onChange={e => setEditForm({...editForm, website: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Location
                     </label>
                     <input
                       type="text"
                       value={editForm.location}
                       onChange={e => setEditForm({...editForm, location: e.target.value})}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
                     />
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={editForm.email}
+                        onChange={e => setEditForm({...editForm, email: e.target.value})}
+                        className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Social Links</label>
+                      {editForm.socialLinks.map((link, index) => (
+                        <div key={index} className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            placeholder="Platform (e.g., Twitter)"
+                            value={link.platform}
+                            onChange={e => handleSocialLinkChange(index, 'platform', e.target.value)}
+                            className="flex-1 px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
+                          />
+                          <input
+                            type="url"
+                            placeholder="URL"
+                            value={link.url}
+                            onChange={e => handleSocialLinkChange(index, 'url', e.target.value)}
+                            className="flex-1 px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSocialLink(index)}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-500"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={addSocialLink}
+                        className="mt-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500"
+                      >
+                        Add Social Link
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -320,7 +531,7 @@ const Profile = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
+                    className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500"
                   >
                     Save Changes
                   </button>
@@ -329,20 +540,20 @@ const Profile = () => {
             ) : (
               <div className="mt-6 space-y-6">
                 {profile.bio && (
-                  <div className="bg-gray-700/20 rounded-xl p-6">
+                  <div className="bg-blue-800/20 rounded-xl p-6">
                     <h3 className="text-xl font-semibold text-white mb-4">About</h3>
                     <p className="text-gray-300">{profile.bio}</p>
                   </div>
                 )}
 
                 {profile.skills?.length > 0 && (
-                  <div className="bg-gray-700/20 rounded-xl p-6">
+                  <div className="bg-blue-800/20 rounded-xl p-6">
                     <h3 className="text-xl font-semibold text-white mb-4">Skills</h3>
                     <div className="flex flex-wrap gap-2">
                       {profile.skills.map((skill, index) => (
                         <span
                           key={index}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded-full"
+                          className="px-3 py-1 bg-cyan-600 text-white rounded-full"
                         >
                           {skill}
                         </span>
@@ -351,7 +562,7 @@ const Profile = () => {
                   </div>
                 )}
 
-                <div className="bg-gray-700/20 rounded-xl p-6">
+                <div className="bg-blue-800/20 rounded-xl p-6">
                   <h3 className="text-xl font-semibold text-white mb-4">Links</h3>
                   <div className="grid grid-cols-2 gap-4">
                     {profile.github && (
@@ -359,7 +570,7 @@ const Profile = () => {
                         href={profile.github}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300"
+                        className="flex items-center space-x-2 text-cyan-400 hover:text-cyan-300"
                       >
                         <FiGithub />
                         <span>GitHub Profile</span>
@@ -370,7 +581,7 @@ const Profile = () => {
                         href={profile.linkedin}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300"
+                        className="flex items-center space-x-2 text-cyan-400 hover:text-cyan-300"
                       >
                         <FiLinkedin />
                         <span>LinkedIn Profile</span>
@@ -381,7 +592,7 @@ const Profile = () => {
                         href={profile.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300"
+                        className="flex items-center space-x-2 text-cyan-400 hover:text-cyan-300"
                       >
                         <FiGlobe />
                         <span>Personal Website</span>
@@ -391,43 +602,43 @@ const Profile = () => {
                 </div>
 
 
-                <div className="bg-gray-700/20 rounded-xl p-6">
+                <div className="bg-blue-800/20 rounded-xl p-6">
                   <h3 className="text-xl font-semibold text-white mb-4">Activity Stats</h3>
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <div className="bg-slate-800/50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-white">{profile.stats?.posts || 0}</div>
-                      <div className="text-gray-400">Projects</div>
+                      <div className="text-gray-300">Projects</div>
                     </div>
-                    <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <div className="bg-slate-800/50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-white">{profile.stats?.collaborations || 0}</div>
-                      <div className="text-gray-400">Collaborations</div>
+                      <div className="text-gray-300">Collaborations</div>
                     </div>
-                    <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <div className="bg-slate-800/50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-white">{profile.stats?.contributions || 0}</div>
-                      <div className="text-gray-400">Contributions</div>
+                      <div className="text-gray-300">Contributions</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Recent Activity Section */}
-                <div className="bg-gray-700/20 rounded-xl p-6">
+                <div className="bg-blue-800/20 rounded-xl p-6">
                   <h3 className="text-xl font-semibold text-white mb-4">Recent Activity</h3>
                   {profile.recentPosts?.length > 0 ? (
                     <div className="space-y-4">
                       {profile.recentPosts.map((post) => (
                         <div 
                           key={post._id}
-                          className="bg-gray-800/50 p-4 rounded-lg hover:bg-gray-800 transition-colors"
+                          className="bg-slate-800/50 p-4 rounded-lg hover:bg-slate-800/80 transition-colors"
                         >
                           <div className="flex justify-between items-start">
                             <div>
                               <h4 className="text-white font-medium">{post.title}</h4>
-                              <p className="text-gray-400 text-sm mt-1">{post.body.substring(0, 100)}...</p>
+                              <p className="text-gray-300 text-sm mt-1">{post.body.substring(0, 100)}...</p>
                             </div>
                             <span className={`px-2 py-1 rounded-full text-xs ${
-                              post.type === 'showcase' ? 'bg-purple-600' : 
-                              post.type === 'seeking-contributors' ? 'bg-orange-600' : 
-                              'bg-green-600'
+                              post.type === 'showcase' ? 'bg-teal-600' : 
+                              post.type === 'seeking-contributors' ? 'bg-cyan-600' : 
+                              'bg-blue-600'
                             } text-white`}>
                               {post.type}
                             </span>
@@ -436,13 +647,13 @@ const Profile = () => {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-400">No recent activity</p>
+                    <p className="text-gray-300">No recent activity</p>
                   )}
                 </div>
 
                 {/* Location Section */}
                 {profile.location && (
-                  <div className="bg-gray-700/20 rounded-xl p-6">
+                  <div className="bg-blue-800/20 rounded-xl p-6">
                     <h3 className="text-xl font-semibold text-white mb-4">Location</h3>
                     <div className="flex items-center space-x-2 text-gray-300">
                       <FiMapPin className="text-gray-400" />
@@ -451,34 +662,13 @@ const Profile = () => {
                   </div>
                 )}
 
-                {/* Contact Information */}
-                <div className="bg-gray-700/20 rounded-xl p-6">
-                  <h3 className="text-xl font-semibold text-white mb-4">Contact Information</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <FiMail className="text-gray-400" />
-                      <span className="text-gray-300">{profile.email}</span>
-                    </div>
-                    {profile.socialLinks?.map((link, index) => (
-                      <a
-                        key={index}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300"
-                      >
-                        <FiGlobe />
-                        <span>{link.platform}</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
+                
 
                 {/* Account Settings Link */}
                 <div className="mt-8 flex justify-end">
                   <button
                     onClick={() => navigate('/settings')}
-                    className="text-indigo-400 hover:text-indigo-300 flex items-center space-x-2"
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-2"
                   >
                     <FiSettings />
                     <span>Account Settings</span>
