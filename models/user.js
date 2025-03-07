@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const jwt = require('jsonwebtoken')
+const bcrypt = require('bcryptjs');
 
 const userSchema = new Schema({
     firstName: {
@@ -27,7 +28,9 @@ const userSchema = new Schema({
     },    
     Password:{
         type: String,
-        required: true
+        required: function() {
+            return !this.googleId; // Password is required only if not using Google auth
+        }
     },
     isVerified: { type: Boolean, default: false }, // Email verification status
     emailVerificationToken: { type: String },
@@ -68,20 +71,21 @@ const userSchema = new Schema({
         platform: String,
         url: String
     }],
+    googleId: {
+        type: String,
+        sparse: true,
+        unique: true
+    },
 }, {timestamps:true});
 
 //get the token
 userSchema.methods.jwtGenerateToken = function() {
-    try {
-        const expiresIn = process.env.EXPIRE_TOKEN || '1h'; // Default to 1 hour
-        return jwt.sign({ id: this._id }, process.env.JWT_SECRET, { expiresIn });
-    } catch (error) {
-        console.error('Error generating JWT:', error);
-        throw new Error('Failed to generate token');
-    }
+    return jwt.sign(
+        { id: this._id },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.EXPIRE_TOKEN || '24h' }
+    );
 };
-
-
 
 const User = mongoose.model('User',userSchema);
 

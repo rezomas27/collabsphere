@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import axios from 'axios';
 
 const PrivateRoute = ({ children }) => {
   const [isVerified, setIsVerified] = useState(null);
@@ -21,44 +20,48 @@ const PrivateRoute = ({ children }) => {
       }
 
       try {
-        // First get CSRF token
-        const csrfResponse = await axios.get('/api/csrf-token', { withCredentials: true });
-        const csrfToken = csrfResponse.data.token;
-
-        // Then make the authenticated request
-        const response = await axios.get('/api/users/me', { 
-          withCredentials: true,
+        console.log('Verifying authentication...');
+        const response = await fetch('http://localhost:3000/api/users/me', {
+          method: 'GET',
           headers: {
-            'x-csrf-token': csrfToken
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           },
-          validateStatus: function (status) {
-            return status < 500;
-          }
+          credentials: 'include'
         });
 
-        const status = response.status === 200;
-        setIsVerified(status);
+        console.log('Auth response status:', response.status);
+        console.log('Auth response headers:', Object.fromEntries(response.headers.entries()));
 
-        // Cache the result
-        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
-          timestamp: Date.now(),
-          status
-        }));
-      } catch (error) {
-        console.error('Auth verification error:', error);
-        if (error.response?.status === 429) {
-          // If rate limited, use cached value or default to previous state
-          const cached = localStorage.getItem(AUTH_CACHE_KEY);
-          if (cached) {
-            const { status } = JSON.parse(cached);
-            setIsVerified(status);
-          }
-          return;
+        if (response.status === 429) {
+          // Rate limit hit - wait a bit and try again
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return verifyAuth();
         }
 
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Auth verification failed:', errorData);
+          throw new Error(errorData.message || 'Authentication failed');
+        }
+
+        const data = await response.json();
+        console.log('Auth verification response:', data);
+
+        if (data.success) {
+          setIsVerified(true);
+          // Cache the successful result
+          localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+            timestamp: Date.now(),
+            status: true
+          }));
+        } else {
+          throw new Error(data.message || 'Authentication failed');
+        }
+      } catch (error) {
+        console.error('Auth verification error:', error);
         setIsVerified(false);
         sessionStorage.removeItem('auth');
-        document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         localStorage.removeItem(AUTH_CACHE_KEY);
       }
     };

@@ -9,11 +9,19 @@ const Create = () => {
    type: 'showcase',
    body: '',
    github: '',
-   demo: ''
+   demo: '',
+   projectUrl: ''
  });
  
  const [error, setError] = useState('');
  const [isSubmitting, setIsSubmitting] = useState(false);
+ const [validationErrors, setValidationErrors] = useState({
+   title: '',
+   body: '',
+   github: '',
+   demo: '',
+   projectUrl: ''
+ });
 
  const postTypes = [
    { value: 'showcase', label: '🎨 Project Showcase - Share your completed project' },
@@ -24,17 +32,80 @@ const Create = () => {
    { value: 'other', label: '✨ Other - Other project-related posts' }
  ];
 
+ const validateUrl = (url, field) => {
+   if (!url) return true;
+   try {
+     new URL(url);
+     if (field === 'github' && !url.startsWith('https://github.com/')) {
+       throw new Error('Must be a valid GitHub URL');
+     }
+     return true;
+   } catch (e) {
+     return false;
+   }
+ };
+
+ const validateField = (name, value) => {
+   let error = '';
+   
+   switch (name) {
+     case 'title':
+       if (value.length > 100) {
+         error = 'Title cannot be more than 100 characters';
+       }
+       break;
+     case 'body':
+       if (value.length > 5000) {
+         error = 'Description cannot be more than 5000 characters';
+       }
+       break;
+     case 'github':
+       if (value && !validateUrl(value, 'github')) {
+         error = 'Please enter a valid GitHub URL';
+       }
+       break;
+     case 'demo':
+     case 'projectUrl':
+       if (value && !validateUrl(value)) {
+         error = 'Please enter a valid URL';
+       }
+       break;
+   }
+   
+   setValidationErrors(prev => ({
+     ...prev,
+     [name]: error
+   }));
+   
+   return !error;
+ };
+
  const handleChange = (e) => {
    const { name, value } = e.target;
    setFormData(prev => ({
      ...prev,
      [name]: value
    }));
+   
+   validateField(name, value);
  };
 
  const handleSubmit = async (e) => {
    e.preventDefault();
    setError('');
+   
+   // Validate all fields
+   const isTitleValid = validateField('title', formData.title);
+   const isBodyValid = validateField('body', formData.body);
+   const isGithubValid = validateField('github', formData.github);
+   const isDemoValid = validateField('demo', formData.demo);
+   const isProjectUrlValid = validateField('projectUrl', formData.projectUrl);
+   
+   if (!isTitleValid || !isBodyValid || !isGithubValid || !isDemoValid || !isProjectUrlValid) {
+     setError('Please fix the validation errors before submitting');
+     return;
+   }
+   
    setIsSubmitting(true);
 
    try {
@@ -98,9 +169,14 @@ const Create = () => {
               name="title"
               value={formData.title}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-md bg-slate-800/80 border-blue-700/50 text-white shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+              className={`mt-1 block w-full rounded-md bg-slate-800/80 border ${
+                validationErrors.title ? 'border-red-500' : 'border-blue-700/50'
+              } text-white shadow-sm focus:border-cyan-500 focus:ring-cyan-500`}
               required
             />
+            {validationErrors.title && (
+              <p className="mt-1 text-sm text-red-400">{validationErrors.title}</p>
+            )}
           </div>
 
           <div>
@@ -133,8 +209,13 @@ const Create = () => {
               value={formData.github}
               onChange={handleChange}
               placeholder="https://github.com/username/repository"
-              className="mt-1 block w-full rounded-md bg-slate-800/80 border-blue-700/50 text-white placeholder-gray-400 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+              className={`mt-1 block w-full rounded-md bg-slate-800/80 border ${
+                validationErrors.github ? 'border-red-500' : 'border-blue-700/50'
+              } text-white placeholder-gray-400 shadow-sm focus:border-cyan-500 focus:ring-cyan-500`}
             />
+            {validationErrors.github && (
+              <p className="mt-1 text-sm text-red-400">{validationErrors.github}</p>
+            )}
           </div>
 
           <div>
@@ -148,8 +229,33 @@ const Create = () => {
               value={formData.demo}
               onChange={handleChange}
               placeholder="https://your-project-demo.com"
-              className="mt-1 block w-full rounded-md bg-slate-800/80 border-blue-700/50 text-white placeholder-gray-400 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+              className={`mt-1 block w-full rounded-md bg-slate-800/80 border ${
+                validationErrors.demo ? 'border-red-500' : 'border-blue-700/50'
+              } text-white placeholder-gray-400 shadow-sm focus:border-cyan-500 focus:ring-cyan-500`}
             />
+            {validationErrors.demo && (
+              <p className="mt-1 text-sm text-red-400">{validationErrors.demo}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="projectUrl" className="block text-sm font-medium text-gray-200">
+              Project URL (optional)
+            </label>
+            <input
+              type="url"
+              id="projectUrl"
+              name="projectUrl"
+              value={formData.projectUrl}
+              onChange={handleChange}
+              placeholder="https://your-project-url.com"
+              className={`mt-1 block w-full rounded-md bg-slate-800/80 border ${
+                validationErrors.projectUrl ? 'border-red-500' : 'border-blue-700/50'
+              } text-white placeholder-gray-400 shadow-sm focus:border-cyan-500 focus:ring-cyan-500`}
+            />
+            {validationErrors.projectUrl && (
+              <p className="mt-1 text-sm text-red-400">{validationErrors.projectUrl}</p>
+            )}
           </div>
 
           <div>
@@ -168,9 +274,17 @@ const Create = () => {
               value={formData.body}
               onChange={handleChange}
               rows="8"
-              className="mt-2 block w-full rounded-md bg-slate-800/80 border-blue-700/50 text-white shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+              className={`mt-2 block w-full rounded-md bg-slate-800/80 border ${
+                validationErrors.body ? 'border-red-500' : 'border-blue-700/50'
+              } text-white shadow-sm focus:border-cyan-500 focus:ring-cyan-500`}
               required
             />
+            {validationErrors.body && (
+              <p className="mt-1 text-sm text-red-400">{validationErrors.body}</p>
+            )}
+            <p className="mt-1 text-sm text-gray-400 text-right">
+              {formData.body.length}/5000 characters
+            </p>
           </div>
 
           <div className="flex justify-end">

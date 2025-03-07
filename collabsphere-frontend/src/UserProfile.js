@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import Header from './components/Header';
 import { 
   FiMail, 
   FiGithub, 
@@ -23,48 +22,83 @@ const UserProfile = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const currentUser = JSON.parse(localStorage.getItem('user')); // Get current user
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        setLoading(true);
+        setError('');
+
+        // Fetch user data
         const userResponse = await fetch(`/api/profile/user/${username}`, {
           credentials: 'include'
         });
+
+        if (!userResponse.ok) {
+          if (userResponse.status === 404) {
+            throw new Error('User not found');
+          } else if (userResponse.status === 401) {
+            throw new Error('Please log in to view this profile');
+          }
+          throw new Error('Failed to fetch user data');
+        }
+
         const userData = await userResponse.json();
         
-        if (userData.success && userData.data) {
-          const userId = userData.data._id;
-          
-          // Fetch posts and stats
-          const [postsRes, statsRes] = await Promise.all([
-            fetch(`/api/posts/user/${userId}`, { credentials: 'include' }),
-            fetch(`/api/posts/stats/${userId}`, { credentials: 'include' })
-          ]);
-          
-          const [postsData, statsData] = await Promise.all([
-            postsRes.json(),
-            statsRes.json()
-          ]);
-          
-          setUser({
-            ...userData.data,
-            recentPosts: Array.isArray(postsData) ? postsData : [],
-            stats: statsData
-          });
-        } else {
-          setError('User not found');
+        if (!userData.success || !userData.data) {
+          throw new Error('Invalid user data received');
         }
+
+        const userId = userData.data._id;
+
+        // Fetch posts
+        const postsResponse = await fetch(`/api/posts/user/${userId}`, { 
+          credentials: 'include' 
+        });
+
+        if (!postsResponse.ok) {
+          throw new Error('Failed to fetch user posts');
+        }
+
+        const postsData = await postsResponse.json();
+
+        // Calculate stats from posts
+        const stats = {
+          posts: postsData.length,
+          collaborations: postsData.filter(post => post.type === 'seeking-contributors').length,
+          contributions: postsData.filter(post => post.type === 'looking-to-join').length
+        };
+
+        // Combine all data
+        setUser({
+          ...userData.data,
+          recentPosts: Array.isArray(postsData) ? postsData : [],
+          stats
+        });
+
+        setRetryCount(0); // Reset retry count on success
       } catch (error) {
-        console.error('Error:', error);
-        setError('Failed to load user profile');
+        console.error('Error fetching user data:', error);
+        
+        if (error.message === 'Please log in to view this profile') {
+          setError(error.message);
+          setTimeout(() => navigate('/login'), 2000);
+        } else if (retryCount < maxRetries) {
+          // Retry on network errors
+          setRetryCount(prev => prev + 1);
+          setTimeout(() => fetchUserData(), 2000 * (retryCount + 1));
+        } else {
+          setError(error.message || 'Failed to load user profile. Please try again later.');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchUserData();
-  }, [username]);
+  }, [username, navigate, retryCount]);
 
   const handleMessageClick = () => {
     if (!document.cookie.includes('token=') && !sessionStorage.getItem('auth')) {
@@ -76,18 +110,36 @@ const UserProfile = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
 
-  if (error || !user) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-900">
-        <Header />
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
         <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="text-center text-gray-400">{error || 'User not found'}</div>
+          <div className="bg-red-900/20 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-red-700/50">
+            <div className="text-center text-red-200">{error}</div>
+            {retryCount < maxRetries && (
+              <div className="text-center text-gray-400 mt-4">
+                Retrying... ({retryCount + 1}/{maxRetries})
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-gray-700/50">
+            <div className="text-center text-gray-400">User not found</div>
+          </div>
         </div>
       </div>
     );
@@ -95,7 +147,6 @@ const UserProfile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
-      
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-gray-700/50">
           {/* Profile Header */}

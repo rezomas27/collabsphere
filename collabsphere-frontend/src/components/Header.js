@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FiMenu, FiX, FiUser, FiPlus, FiMessageSquare, FiGrid, FiHome, FiInfo } from 'react-icons/fi';
 import logo from '../assets/logo.png';
@@ -7,21 +7,28 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAuth, setIsAuth] = useState(false);
   
-  // Improved auth check
-  const isAuthenticated = () => {
-    const token = document.cookie.includes('token=') || sessionStorage.getItem('auth');
-    return !!token;
-  };
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/users/me', {
+          credentials: 'include'
+        });
+        setIsAuth(response.ok);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuth(false);
+      }
+    };
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/', '/browse', '/about', '/login', '/signup', 
-    '/contact', '/help', '/community-guidelines', '/privacy', '/terms', '/cookies'];
+    checkAuth();
+  }, [location.pathname]);
 
   const handleLogoClick = (e) => {
     e.preventDefault();
     setIsMobileMenuOpen(false);
-    navigate(isAuthenticated() ? '/posts' : '/');
+    navigate(isAuth ? '/posts' : '/');
   };
 
   const isActivePath = (path) => {
@@ -77,7 +84,7 @@ const Header = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-2">
-            {isAuthenticated() ? (
+            {isAuth ? (
               <>
                 <NavLink to="/posts" icon={FiGrid}>Dashboard</NavLink>
                 <NavLink to="/posts/create" icon={FiPlus}>Create Post</NavLink>
@@ -122,7 +129,7 @@ const Header = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-gradient-to-b from-slate-900/95 to-blue-900/95 border-b border-cyan-500/20">
           <div className="px-2 pt-2 pb-3 space-y-1">
-            {isAuthenticated() ? (
+            {isAuth ? (
               <>
                 <NavLink to="/posts" icon={FiGrid}>Dashboard</NavLink>
                 <NavLink to="/posts/create" icon={FiPlus}>Create Project</NavLink>

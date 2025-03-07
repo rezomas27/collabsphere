@@ -35,31 +35,12 @@ const BrowseProjects = () => {
         const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
         console.log('Using API URL:', apiUrl);
         
-        // First, get the CSRF token
-        const tokenResponse = await fetch(`${apiUrl}/api/csrf-token`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!tokenResponse.ok) {
-          throw new Error('Failed to get CSRF token');
-        }
-
-        const { token } = await tokenResponse.json();
-        console.log('Got CSRF token');
-
-        // Now fetch the posts with the CSRF token
         const response = await fetch(`${apiUrl}/api/posts/browse`, {
           method: 'GET',
           credentials: 'include',
           headers: {
             'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'x-csrf-token': token
+            'Content-Type': 'application/json'
           }
         });
 
@@ -79,11 +60,29 @@ const BrowseProjects = () => {
             throw new Error(result.message || 'Failed to fetch posts');
           }
 
-          const postsWithCounts = result.data.map(post => ({
-            ...post,
-            commentCount: 0,
-            likeCount: post.likes?.length || 0
-          }));
+          // Fetch comment counts for each post
+          const postsWithCounts = await Promise.all(
+            result.data.map(async post => {
+              try {
+                const commentResponse = await fetch(`${apiUrl}/api/comments/post/${post._id}`, {
+                  credentials: 'include'
+                });
+                const comments = await commentResponse.json();
+                return {
+                  ...post,
+                  commentCount: Array.isArray(comments) ? comments.length : 0,
+                  likeCount: post.likes?.length || 0
+                };
+              } catch (error) {
+                console.error(`Error fetching comments for post ${post._id}:`, error);
+                return {
+                  ...post,
+                  commentCount: 0,
+                  likeCount: post.likes?.length || 0
+                };
+              }
+            })
+          );
           
           console.log('Processed posts:', postsWithCounts);
           setPosts(postsWithCounts);
@@ -297,6 +296,19 @@ const BrowseProjects = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                         Live Demo
+                      </a>
+                    )}
+                    {post.projectUrl && (
+                      <a 
+                        href={post.projectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        Project URL
                       </a>
                     )}
                   </div>

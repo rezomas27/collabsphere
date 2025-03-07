@@ -5,16 +5,11 @@ import { debounce } from 'lodash';
 import { 
   FiEdit2, 
   FiLogOut, 
-  FiMail, 
-  FiUser, 
-  FiShield, 
   FiGithub, 
   FiLinkedin, 
   FiGlobe, 
   FiMapPin, 
   FiSettings,
-  FiAnchor,
-  FiUpload,
   FiCamera
 } from 'react-icons/fi';
 
@@ -203,35 +198,34 @@ const Profile = () => {
   };
 
   const handleLogout = async () => {
-    // Start client-side cleanup immediately
-    console.log('Starting logout...');
-    sessionStorage.clear();
-    localStorage.clear();
-    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    
-    // Navigate to home page immediately
-    navigate('/');
-
-    // Perform server-side logout in the background
     try {
-      const csrfResponse = await axios.get('/api/csrf-token', {
-        withCredentials: true,
-        timeout: 1000 // 1 second timeout
-      });
-      
-      if (csrfResponse.data.token) {
-        await axios.post('/api/users/logout', {}, {
-          withCredentials: true,
-          headers: {
-            'X-CSRF-Token': csrfResponse.data.token,
-            'Content-Type': 'application/json'
-          },
-          timeout: 1000 // 1 second timeout
+        const response = await fetch('http://localhost:3000/api/users/logout', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
-      }
+
+        if (response.ok) {
+            // Clear all client-side storage
+            sessionStorage.clear();
+            localStorage.clear();
+
+            // Clear any auth-related cookies from the client side
+            document.cookie.split(';').forEach(cookie => {
+                const [name] = cookie.split('=');
+                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+            });
+
+            // Force a complete page reload to clear React state
+            window.location.href = '/login';
+        } else {
+            throw new Error('Logout failed');
+        }
     } catch (error) {
-      console.error('Background logout error:', error.message);
+        console.error('Logout error:', error);
+        addToast('Failed to logout. Please try again.', 'error');
     }
   };
 
@@ -345,7 +339,11 @@ const Profile = () => {
       
       <div className="max-w-6xl mx-auto px-4 py-8">
         {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-700 text-red-200 rounded">
+          <div className={`mb-4 p-3 ${
+            error.includes('successfully') 
+              ? 'bg-green-900/50 border border-green-700 text-green-200' 
+              : 'bg-red-900/50 border border-red-700 text-red-200'
+          } rounded`}>
             {error}
           </div>
         )}
@@ -473,16 +471,6 @@ const Profile = () => {
 
                 <div className="mt-6">
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Email</label>
-                      <input
-                        type="email"
-                        value={editForm.email}
-                        onChange={e => setEditForm({...editForm, email: e.target.value})}
-                        className="w-full px-4 py-2 bg-slate-800/80 border border-blue-700/50 rounded-lg text-white"
-                      />
-                    </div>
-                    
                     <div>
                       <label className="block text-sm text-gray-400 mb-1">Social Links</label>
                       {editForm.socialLinks.map((link, index) => (

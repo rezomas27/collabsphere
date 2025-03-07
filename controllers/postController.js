@@ -5,16 +5,32 @@ const User = require('../models/user')
 // Public route to browse posts
 const browse_posts = async (req, res) => {
     try {
-        console.log('Fetching posts for browse...');
+        console.log('Fetching posts, user:', req.user ? req.user._id : 'not authenticated');
         const posts = await Post.find()
             .sort({createdAt: -1})
             .populate('user', 'userName firstName lastName')
             .select('-comments')
             .lean(); // Convert to plain JavaScript objects
         
-        console.log(`Found ${posts.length} posts`);
+        console.log('Found posts:', posts.length);
         
-        // Always return a success response, even with empty data
+        // If user is authenticated, add isLiked flag to each post
+        if (req.user) {
+            posts.forEach(post => {
+                // Convert ObjectId to string for comparison
+                const postUserId = post.user._id.toString();
+                const currentUserId = req.user._id.toString();
+                console.log('Comparing post user:', postUserId, 'with current user:', currentUserId);
+                post.isLiked = post.likes.some(like => like.toString() === currentUserId);
+                post.likeCount = post.likes.length;
+            });
+        } else {
+            posts.forEach(post => {
+                post.isLiked = false;
+                post.likeCount = post.likes.length;
+            });
+        }
+        
         res.json({
             success: true,
             data: posts || []
@@ -83,16 +99,15 @@ const post_create_get = (req, res) => {
 
 const post_create_post = async (req, res) => {
     try {
-        console.log('Request body:', req.body);
-        const { title, body, type, github, demo } = req.body;
+        console.log('Creating new post:', req.body);
+        const { title, body, type, github, demo, projectUrl } = req.body;
         
         if (!title || !body || !type) {
+            console.warn('Missing required fields in post creation');
             return res.status(400).json({ 
                 message: 'Title, body, and type are required' 
             });
         }
-
-        // Auth check is now handled by middleware
 
         const post = new Post({
             title,
@@ -100,10 +115,12 @@ const post_create_post = async (req, res) => {
             body,
             github: github || '',
             demo: demo || '',
+            projectUrl: projectUrl || '',
             user: req.user._id
         });
 
         const savedPost = await post.save();
+        console.log(`Post created successfully: ${savedPost._id}`);
         res.status(201).json(savedPost);
 
     } catch (err) {
@@ -134,17 +151,14 @@ const post_delete = async (req, res) => {
 const getUserPosts = async (req, res) => {
     try {
         const userId = req.params.userId || req.user._id;
-        console.log('Fetching posts for user:', userId);
         
         const posts = await Post.find({ user: userId })
             .sort({ createdAt: -1 })
             .populate('user', 'userName')
             .limit(5);
             
-        console.log('Found posts:', posts);
         res.json(posts);
     } catch (error) {
-        console.error('Error getting user posts:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -183,7 +197,6 @@ const post_update = async (req, res) => {
         res.json(updatedPost);
   
     } catch (err) {
-        console.error('Error updating post:', err);
         res.status(500).json({ 
             message: 'Error updating post',
             error: err.message 
@@ -195,22 +208,39 @@ const toggleLike = async (req, res) => {
     try {
         const post = await Post.findById(req.params.id);
         if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
+            console.warn(`Post not found for like toggle: ${req.params.id}`);
+            return res.status(404).json({ 
+                success: false,
+                message: 'Post not found' 
+            });
         }
 
         const likeIndex = post.likes.indexOf(req.user._id);
-        if (likeIndex === -1) {
-            // Like the post
+        const isLiked = likeIndex === -1;
+
+        if (isLiked) {
             post.likes.push(req.user._id);
+            console.log(`User ${req.user._id} liked post ${post._id}`);
         } else {
-            // Unlike the post
             post.likes.splice(likeIndex, 1);
+            console.log(`User ${req.user._id} unliked post ${post._id}`);
         }
 
         await post.save();
-        res.json({ likes: post.likes.length, isLiked: likeIndex === -1 });
+
+        // Return consistent data structure
+        res.json({ 
+            success: true,
+            isLiked: isLiked,
+            likeCount: post.likes.length
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error toggling like:', err);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error toggling like',
+            error: err.message 
+        });
     }
 };
 
@@ -219,7 +249,10 @@ const getLikes = async (req, res) => {
         const post = await Post.findById(req.params.id);
         
         if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
+            return res.status(404).json({ 
+                success: false,
+                message: 'Post not found' 
+            });
         }
 
         // Get users who liked the post
@@ -227,13 +260,18 @@ const getLikes = async (req, res) => {
             .select('userName firstName lastName');
         
         res.json({
+            success: true,
             count: post.likes.length,
             users: users,
             isLiked: post.likes.includes(req.user._id)
         });
     } catch (err) {
         console.error('Error getting post likes:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error getting likes',
+            error: err.message 
+        });
     }
 };
 

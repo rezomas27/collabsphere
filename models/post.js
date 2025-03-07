@@ -6,7 +6,9 @@ const Schema = mongoose.Schema;
 const postSchema = new Schema({
     title: {
         type: String,
-        required: true
+        required: true,
+        maxlength: [100, 'Title cannot be more than 100 characters'],
+        trim: true
     },
     type: {
         type: String,
@@ -16,15 +18,42 @@ const postSchema = new Schema({
     },
     github: {
         type: String,
-        required: false
+        required: false,
+        validate: {
+            validator: function(v) {
+                if (!v) return true; // Allow empty values
+                return /^https:\/\/github\.com\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-_.]+$/.test(v);
+            },
+            message: props => `${props.value} is not a valid GitHub URL!`
+        }
     },
     demo: {
         type: String,
-        required: false
+        required: false,
+        validate: {
+            validator: function(v) {
+                if (!v) return true; // Allow empty values
+                return /^https?:\/\/[^\s/$.?#].[^\s]*$/.test(v);
+            },
+            message: props => `${props.value} is not a valid URL!`
+        }
+    },
+    projectUrl: {
+        type: String,
+        required: false,
+        validate: {
+            validator: function(v) {
+                if (!v) return true; // Allow empty values
+                return /^https?:\/\/[^\s/$.?#].[^\s]*$/.test(v);
+            },
+            message: props => `${props.value} is not a valid URL!`
+        }
     },
     body: {
         type: String,
-        required: true
+        required: true,
+        maxlength: [5000, 'Description cannot be more than 5000 characters'],
+        trim: true
     },
     user: {
         type: Schema.Types.ObjectId,

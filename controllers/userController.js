@@ -37,26 +37,49 @@ const user_login_post = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    // Generate JWT token
-    const token = await user.jwtGenerateToken();
-    const expiresIn = process.env.EXPIRE_TOKEN || '1h';
-    const maxAge = expiresIn.includes('h') ? 
-    parseInt(expiresIn) * 60 * 60 * 1000 : 
-    parseInt(expiresIn) * 1000;
-    
-    res
-      .status(200)
-      .cookie('token', token, {
-        httpOnly: true,
-        maxAge: maxAge 
-      })
-      .json({
-        success: true,
-        redirectUrl: '/posts'
-      });
+    // Set user in session
+    req.login(user, async (err) => {
+      if (err) {
+        console.error('Session login error:', err);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Error during login' 
+        });
+      }
+
+      // Generate JWT token
+      const token = await user.jwtGenerateToken();
       
+      // Set cookies with consistent options
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
+
+      // Set temporary auth success cookie for frontend
+      res.cookie('auth_success', 'true', {
+        httpOnly: false,
+        maxAge: 5000 // 5 seconds
+      });
+
+      console.log('Login successful:', {
+        userId: user._id,
+        sessionId: req.sessionID
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Successfully logged in'
+      });
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: err.message 
+    });
   }
 };
 
@@ -303,10 +326,46 @@ const searchUsers = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
     try {
-        const user = await User.findById(req.user._id).select('-password');
-        res.json(user);
+        console.log('Getting current user:', {
+            isAuthenticated: req.isAuthenticated(),
+            sessionUser: req.user ? req.user._id : 'No session user',
+            cookies: req.cookies
+        });
+
+        if (!req.user || !req.user._id) {
+            console.error('No authenticated user found');
+            return res.status(401).json({ 
+                success: false,
+                message: 'Not authenticated' 
+            });
+        }
+
+        const user = await User.findById(req.user._id)
+            .select('-Password -emailVerificationCode -emailVerificationExpires');
+        
+        if (!user) {
+            console.error('User not found in database:', req.user._id);
+            return res.status(404).json({ 
+                success: false,
+                message: 'User not found' 
+            });
+        }
+
+        console.log('User found:', user._id);
+        res.json({
+            success: true,
+            data: user
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching user data' });
+        console.error('Error in getCurrentUser:', {
+            message: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching user data',
+            error: error.message 
+        });
     }
 };
 
@@ -331,51 +390,50 @@ const user_logout = async (req, res) => {
     try {
         console.log('Logout request received');
         console.log('User:', req.user ? req.user._id : 'No user found');
-        console.log('Headers:', {
-            csrf: req.headers['x-csrf-token'],
-            cookie: req.headers.cookie,
-            host: req.headers.host,
-            contentType: req.headers['content-type']
-        });
 
-        // Validate CSRF token
-        const csrfToken = req.headers['x-csrf-token'];
-        if (!csrfToken) {
-            console.error('No CSRF token provided');
-            return res.status(403).json({
-                success: false,
-                message: 'CSRF token is required'
+        // Destroy the session first
+        if (req.session) {
+            await new Promise((resolve, reject) => {
+                req.session.destroy(err => {
+                    if (err) {
+                        console.error('Session destruction error:', err);
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                });
             });
         }
 
-        // Log the token being used
-        console.log('Using CSRF token:', csrfToken);
-        
-        // Clear the JWT token cookie with all necessary options
-        res.clearCookie('token', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            expires: new Date(0),
-            domain: process.env.NODE_ENV === 'production' ? process.env.DOMAIN : undefined
+        // Clear Passport login session
+        req.logout(function(err) {
+            if (err) {
+                console.error('Passport logout error:', err);
+            }
         });
 
-        console.log('Token cookie cleared');
-
-        // Also clear any other auth-related cookies
-        res.clearCookie('XSRF-TOKEN', {
+        // Clear all cookies with various options to ensure they're removed in all environments
+        const cookieOptions = {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
             expires: new Date(0)
+        };
+
+        res.clearCookie('token', cookieOptions);
+        res.clearCookie('sessionId', cookieOptions);
+        res.clearCookie('connect.sid', cookieOptions);
+        res.clearCookie('XSRF-TOKEN', cookieOptions);
+        res.clearCookie('auth_success', cookieOptions);
+
+        // Send response with cache control headers
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         });
 
-        console.log('CSRF cookie cleared');
-
-        // Send response with success
-        console.log('Sending success response');
         res.status(200).json({
             success: true,
             message: 'Logged out successfully'
@@ -383,13 +441,59 @@ const user_logout = async (req, res) => {
     } catch (error) {
         console.error('Logout error:', {
             message: error.message,
-            stack: error.stack,
-            headers: req.headers
+            stack: error.stack
         });
         res.status(500).json({
             success: false,
             message: 'Error during logout'
         });
+    }
+};
+
+// Google authentication callback
+const googleAuthCallback = async (req, res) => {
+    try {
+        console.log('Google Auth Callback - User:', req.user);
+        
+        if (!req.user) {
+            console.error('No user data in request');
+            return res.redirect('http://localhost:3001/login?error=auth_failed');
+        }
+
+        // Check if this is for account deletion
+        const isForDeletion = req.query.state === 'delete_account';
+        
+        if (isForDeletion) {
+            // Set a flag in the session indicating successful Google auth for deletion
+            req.session.googleAuthForDeletion = true;
+            return res.redirect('http://localhost:3001/settings?googleAuth=success');
+        }
+
+        // Normal login flow
+        req.session.userId = req.user._id;
+        
+        // Generate JWT token
+        const token = await req.user.jwtGenerateToken();
+        
+        // Set cookies
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+
+        // Set a temporary cookie to indicate successful auth to the frontend
+        res.cookie('auth_success', 'true', {
+            httpOnly: false,
+            maxAge: 5000 // 5 seconds
+        });
+
+        console.log('Redirecting to frontend after successful Google auth');
+        res.redirect('http://localhost:3001/posts');
+    } catch (error) {
+        console.error('Google auth callback error:', error);
+        res.redirect('http://localhost:3001/login?error=auth_failed');
     }
 };
 
@@ -405,5 +509,6 @@ module.exports = {
     getCurrentUser,
     sendVerificationEmail,
     deleteUser,
-    user_logout
+    user_logout,
+    googleAuthCallback
 };

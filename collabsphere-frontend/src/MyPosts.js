@@ -23,8 +23,8 @@ const MyPosts = () => {
   const [loading, setLoading] = useState(true);
   const [editingPost, setEditingPost] = useState(null);
   const [error, setError] = useState(null);
-  const [likedPosts, setLikedPosts] = useState(new Set());
   const [viewMode, setViewMode] = useState('grid');
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [urlErrors, setUrlErrors] = useState({
     github: '',
     demo: '',
@@ -32,63 +32,73 @@ const MyPosts = () => {
   });
 
   useEffect(() => {
-    const fetchPosts = async () => {
+    const fetchCurrentUser = async () => {
       try {
-        const userResponse = await fetch('/api/profile/me', {
+        const response = await fetch('/api/users/me', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          console.log('Current user data:', userData);
+          setCurrentUserId(userData.data._id);
+          // Fetch posts after we have the currentUserId
+          fetchPosts(userData.data._id);
+        } else {
+          console.error('Failed to fetch current user:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching current user:', error);
+      }
+    };
+
+    const fetchPosts = async (userId) => {
+      try {
+        console.log('Fetching posts for user:', userId);
+        const response = await fetch('/api/posts/browse', {
           credentials: 'include'
         });
         
-        if (userResponse.status === 401) {
-          window.location.href = '/login';
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = '/login';
+            return;
+          }
+          throw new Error('Failed to fetch posts');
+        }
+
+        const result = await response.json();
+        console.log('Fetched posts result:', result);
+        
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to fetch posts');
+        }
+
+        const data = result.data;
+        if (!Array.isArray(data)) {
+          console.error('Invalid response format');
+          setError('Invalid response format');
+          setPosts([]);
           return;
         }
 
-        const userData = await userResponse.json();
-        const postsResponse = await fetch(`/api/posts/user/${userData.data._id}`, {
-          credentials: 'include'
+        // Filter posts to only show user's posts
+        const userPosts = data.filter(post => {
+          console.log('Comparing post user:', post.user._id, 'with current user:', userId);
+          return post.user._id === userId;
         });
-
-        const postsData = await postsResponse.json();
-        const postsWithComments = await Promise.all(
-          postsData.map(async (post) => {
-            try {
-              const commentsResponse = await fetch(`/api/comments/post/${post._id}`, {
-                credentials: 'include'
-              });
-              const comments = await commentsResponse.json();
-              const likesResponse = await fetch(`/api/posts/${post._id}/likes`, {
-                credentials: 'include'
-              });
-              const likesData = await likesResponse.json();
-              return { 
-                ...post, 
-                commentCount: Array.isArray(comments) ? comments.length : 0,
-                likes: likesData.likes,
-                likeCount: likesData.likeCount,
-                isLiked: likesData.isLiked
-              };
-            } catch {
-              return { 
-                ...post, 
-                commentCount: 0,
-                likes: [],
-                likeCount: 0,
-                isLiked: false 
-              };
-            }
-          })
-        );
-        
-        setPosts(postsWithComments);
+        console.log('Filtered user posts:', userPosts);
+        setPosts(userPosts);
+        setError(null);
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error fetching posts:', error);
+        setError(error.message || 'Failed to load posts');
         setPosts([]);
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchPosts();
+
+    fetchCurrentUser();
   }, []);
 
   const handleDelete = async (postId) => {
@@ -191,29 +201,27 @@ const MyPosts = () => {
         }
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setPosts(posts.map(post => {
-          if (post._id === postId) {
-            return {
-              ...post,
-              likes: post.likes || [],
-              likeCount: data.likes
-            };
-          }
-          return post;
-        }));
-
-        setLikedPosts(prev => {
-          const newLikedPosts = new Set(prev);
-          if (data.isLiked) {
-            newLikedPosts.add(postId);
-          } else {
-            newLikedPosts.delete(postId);
-          }
-          return newLikedPosts;
-        });
+      if (!response.ok) {
+        throw new Error('Failed to like post');
       }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to like post');
+      }
+
+      // Update posts state with new like count and state
+      setPosts(posts.map(post => {
+        if (post._id === postId) {
+          return {
+            ...post,
+            likeCount: data.likeCount,
+            isLiked: data.isLiked
+          };
+        }
+        return post;
+      }));
     } catch (error) {
       console.error('Error liking post:', error);
     }
@@ -455,7 +463,7 @@ const MyPosts = () => {
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                          </svg>
+                            </svg>
                             GitHub
                           </a>
                         )}
@@ -471,6 +479,19 @@ const MyPosts = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                             Live Demo
+                          </a>
+                        )}
+                        {post.projectUrl && (
+                          <a 
+                            href={post.projectUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            Project URL
                           </a>
                         )}
                       </div>
@@ -492,12 +513,13 @@ const MyPosts = () => {
                             handleLike(post._id);
                           }}
                           className={`flex items-center space-x-1 ${
-                            likedPosts.has(post._id) ? 'text-red-500' : 'text-gray-300'
+                            post.isLiked ? 'text-red-500' : 'text-gray-300'
                           } hover:text-red-500 transition-colors z-10`}
+                          aria-label={post.isLiked ? 'Unlike post' : 'Like post'}
                         >
                           <svg
                             className="w-5 h-5"
-                            fill={likedPosts.has(post._id) ? "currentColor" : "none"}
+                            fill={post.isLiked ? "currentColor" : "none"}
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                           >

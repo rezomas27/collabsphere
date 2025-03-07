@@ -13,10 +13,11 @@ const Posts = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
-  const [likedPosts, setLikedPosts] = useState(new Set());
   const [currentUserId, setCurrentUserId] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('recent'); 
+  const [timePeriod, setTimePeriod] = useState('all-time');
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [error, setError] = useState(null);
 
 
@@ -32,51 +33,80 @@ const Posts = () => {
     { value: 'likes', label: 'Most Liked' }
   ];
 
-  const sortPosts = (posts, sortBy) => {
-    return [...posts].sort((a, b) => {
-      if (sortBy === 'likes') {
-        return (b.likeCount || 0) - (a.likeCount || 0);
-      }
-      // Sort by recent (using createdAt timestamp)
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+  const timePeriodOptions = [
+    { value: 'today', label: 'Today' },
+    { value: 'month', label: 'This Month' },
+    { value: 'year', label: 'This Year' },
+    { value: 'all-time', label: 'All Time' }
+  ];
+
+  const sortPosts = (posts, sortBy, timePeriod) => {
+    if (sortBy === 'likes') {
+      // Filter posts by time period
+      const now = new Date();
+      const filterByDate = (post) => {
+        const postDate = new Date(post.createdAt);
+        switch (timePeriod) {
+          case 'today':
+            return postDate.toDateString() === now.toDateString();
+          case 'month':
+            return postDate.getMonth() === now.getMonth() && 
+                   postDate.getFullYear() === now.getFullYear();
+          case 'year':
+            return postDate.getFullYear() === now.getFullYear();
+          default:
+            return true;
+        }
+      };
+
+      // First filter posts by time period
+      const postsInPeriod = posts.filter(filterByDate);
+      
+      // Sort filtered posts by likes (highest to lowest)
+      return postsInPeriod.sort((a, b) => {
+        const aLikes = a.likeCount || 0;
+        const bLikes = b.likeCount || 0;
+        return bLikes - aLikes;
+      });
+    }
+    
+    // Sort by recent (using createdAt timestamp)
+    return [...posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   };
 
   const handleLike = async (postId) => {
     try {
-        const response = await fetch(`/api/posts/${postId}/like`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            setPosts(posts.map(post => {
-                if (post._id === postId) {
-                    return {
-                        ...post,
-                        likes: post.likes || [],
-                        likeCount: data.likes
-                    };
-                }
-                return post;
-            }));
-
-            setLikedPosts(prev => {
-                const newLikedPosts = new Set(prev);
-                if (data.isLiked) {
-                    newLikedPosts.add(postId);
-                } else {
-                    newLikedPosts.delete(postId);
-                }
-                return newLikedPosts;
-            });
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
         }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to like post');
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to like post');
+      }
+
+      // Update posts state with new like count and state
+      setPosts(posts.map(post => {
+        if (post._id === postId) {
+          return {
+            ...post,
+            likeCount: data.likeCount,
+            isLiked: data.isLiked
+          };
+        }
+        return post;
+      }));
     } catch (error) {
-        console.error('Error liking post:', error);
+      console.error('Error liking post:', error);
     }
   };
 
@@ -116,32 +146,41 @@ const Posts = () => {
 
       const data = result.data;
       if (!Array.isArray(data)) {
+        console.error('Invalid response format');
         setError('Invalid response format');
         setPosts([]);
         return;
       }
 
-      const postsWithComments = await Promise.all(
-        data.map(async (post) => {
+      // Fetch comment counts for each post
+      const postsWithCounts = await Promise.all(
+        data.map(async post => {
           try {
-            const commentsResponse = await fetch(`/api/comments/post/${post._id}`, {
+            const commentResponse = await fetch(`/api/comments/post/${post._id}`, {
               credentials: 'include'
             });
-            const comments = await commentsResponse.json();
-            return { 
-              ...post, 
+            const comments = await commentResponse.json();
+            return {
+              ...post,
               commentCount: Array.isArray(comments) ? comments.length : 0,
-              likeCount: post.likes ? post.likes.length : 0
+              likeCount: post.likes?.length || 0
             };
-          } catch {
-            return { ...post, commentCount: 0, likeCount: 0 };
+          } catch (error) {
+            console.error(`Error fetching comments for post ${post._id}:`, error);
+            return {
+              ...post,
+              commentCount: 0,
+              likeCount: post.likes?.length || 0
+            };
           }
         })
       );
-      setPosts(postsWithComments);
+
+      // Update posts with the data from the server
+      setPosts(postsWithCounts);
       setError(null);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching posts:', error);
       setError(error.message || 'Failed to load posts');
       setPosts([]);
     } finally {
@@ -171,7 +210,8 @@ const Posts = () => {
 
       return matchesSearch && matchesType;
     }),
-    sortBy
+    sortBy,
+    timePeriod
   );
 
 
@@ -268,28 +308,59 @@ const Posts = () => {
               <span className="text-gray-300">Sort by:</span>
               <div className="flex gap-2">
                 {sortOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setSortBy(option.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
-                      ${sortBy === option.value
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-blue-900/40 backdrop-blur-sm text-gray-300 hover:bg-blue-800/40'
-                      }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {option.value === 'recent' ? (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
-                      )}
-                      {option.label}
-                    </div>
-                  </button>
+                  <div key={option.value} className="relative">
+                    <button
+                      onClick={() => {
+                        setSortBy(option.value);
+                        if (option.value === 'likes') {
+                          setShowTimeDropdown(true);
+                        } else {
+                          setShowTimeDropdown(false);
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${sortBy === option.value
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-blue-900/40 backdrop-blur-sm text-gray-300 hover:bg-blue-800/40'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {option.value === 'recent' ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        )}
+                        {option.label}
+                        {option.value === 'likes' && timePeriod !== 'all-time' && (
+                          <span className="text-xs text-cyan-300">({timePeriod})</span>
+                        )}
+                      </div>
+                    </button>
+                    {option.value === 'likes' && showTimeDropdown && (
+                      <div className="absolute top-full left-0 mt-1 w-48 bg-blue-900/90 backdrop-blur-sm rounded-lg shadow-lg border border-blue-700/50 z-50">
+                        {timePeriodOptions.map((period) => (
+                          <button
+                            key={period.value}
+                            onClick={() => {
+                              setTimePeriod(period.value);
+                              setShowTimeDropdown(false);
+                            }}
+                            className={`w-full px-4 py-2 text-left text-sm transition-colors
+                              ${timePeriod === period.value
+                                ? 'bg-cyan-600 text-white'
+                                : 'text-gray-300 hover:bg-blue-800/40'
+                              }`}
+                          >
+                            {period.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -373,6 +444,20 @@ const Posts = () => {
                         Live Demo
                       </a>
                     )}
+                    {post.projectUrl && (
+                      <a 
+                        href={post.projectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        Project URL
+                      </a>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-4">
@@ -392,12 +477,13 @@ const Posts = () => {
                         handleLike(post._id);
                       }}
                       className={`flex items-center space-x-1 ${
-                        likedPosts.has(post._id) ? 'text-red-500' : 'text-gray-300'
+                        post.isLiked ? 'text-red-500' : 'text-gray-300'
                       } hover:text-red-500 transition-colors z-10`}
+                      aria-label={post.isLiked ? 'Unlike post' : 'Like post'}
                     >
                       <svg
                         className="w-5 h-5"
-                        fill={likedPosts.has(post._id) ? "currentColor" : "none"}
+                        fill={post.isLiked ? "currentColor" : "none"}
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >

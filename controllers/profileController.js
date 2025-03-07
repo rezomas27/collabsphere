@@ -77,19 +77,7 @@ const updateProfile = async (req, res) => {
             profilePicture
         } = req.body;
         
-        console.log('Received update data:', {
-            firstName,
-            lastName,
-            bio,
-            skills,
-            github,
-            linkedin,
-            website,
-            location,
-            email,
-            socialLinks,
-            profilePicture
-        });
+
 
         // Create update object with only provided fields
         const updates = {};
@@ -230,6 +218,14 @@ const changePassword = async (req, res) => {
             });
         }
 
+        // Check if user is Google-authenticated and hasn't set up a password yet
+        if (user.googleId && !user.Password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please set up a password first using the setupPassword endpoint'
+            });
+        }
+
         // Verify current password
         const isMatch = await bcrypt.compare(currentPassword, user.Password);
         if (!isMatch) {
@@ -265,6 +261,65 @@ const changePassword = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Server error while changing password'
+        });
+    }
+};
+
+// Add new function to set up password for Google users
+const setupPassword = async (req, res) => {
+    try {
+        const { newPassword, verificationCode } = req.body;
+        const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Verify this is a Google user
+        if (!user.googleId) {
+            return res.status(400).json({
+                success: false,
+                message: 'This endpoint is only for Google-authenticated users'
+            });
+        }
+
+        // Verify the code
+        if (!user.passwordChangeCode || 
+            user.passwordChangeCode !== verificationCode ||
+            user.passwordChangeCodeExpires < Date.now()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired verification code'
+            });
+        }
+
+        // Validate password requirements
+        const passwordPattern = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordPattern.test(newPassword)) {
+            return res.status(400).json({
+                message: "Password must contain 1 uppercase letter, 1 number, and be at least 8 characters",
+            });
+        }
+
+        // Hash and save new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        user.Password = hashedPassword;
+        user.passwordChangeCode = undefined;
+        user.passwordChangeCodeExpires = undefined;
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Password set up successfully'
+        });
+    } catch (error) {
+        console.error('Error in setupPassword:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while setting up password'
         });
     }
 };
@@ -355,13 +410,33 @@ const deleteAccount = async (req, res) => {
             });
         }
 
-        // Verify password
-        const isMatch = await bcrypt.compare(password, user.Password);
-        if (!isMatch) {
-            return res.status(400).json({
-                success: false,
-                message: "Password is incorrect"
-            });
+        // For Google users, they must be authenticated through Google OAuth
+        if (user.googleId) {
+            if (!req.session.googleAuthForDeletion) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Please authenticate with Google to delete your account',
+                    requiresGoogleAuth: true
+                });
+            }
+            // Clear the flag after checking
+            req.session.googleAuthForDeletion = false;
+        } else {
+            // For regular users, verify password
+            if (!password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Password is required for account deletion"
+                });
+            }
+
+            const isMatch = await bcrypt.compare(password, user.Password);
+            if (!isMatch) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Password is incorrect"
+                });
+            }
         }
 
         // Delete user's posts
@@ -369,6 +444,37 @@ const deleteAccount = async (req, res) => {
 
         // Delete user account
         await User.findByIdAndDelete(req.user._id);
+
+        // Clear session
+        if (req.session) {
+            req.session.destroy((err) => {
+                if (err) {
+                    console.error('Session destruction error:', err);
+                }
+            });
+        }
+
+        // Clear authentication
+        req.logout((err) => {
+            if (err) {
+                console.error('Logout error:', err);
+            }
+        });
+
+        // Clear cookies
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+        });
+
+        res.clearCookie('XSRF-TOKEN', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+        });
 
         res.json({
             success: true,
@@ -434,6 +540,7 @@ module.exports = {
     getProfile,
     updateProfile,
     changePassword,
+    setupPassword,
     getUserByUsername,
     updateEmail,
     deleteAccount,

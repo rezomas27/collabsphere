@@ -2,13 +2,46 @@ import React, { useState } from 'react';
 import DOMPurify from 'dompurify';
 import axios from '../utils/axios';
 
-const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId prop
+const CommentForm = ({ postId, onCommentAdded, parentId }) => {
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [validationError, setValidationError] = useState('');
+
+  const validateComment = (content) => {
+    if (!content.trim()) {
+      setValidationError('Comment cannot be empty');
+      return false;
+    }
+
+    if (content.length > 1000) {
+      setValidationError('Comment cannot be more than 1000 characters');
+      return false;
+    }
+
+    // Check for URLs in content
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = content.match(urlRegex) || [];
+    for (const url of urls) {
+      try {
+        new URL(url);
+      } catch (e) {
+        setValidationError('Invalid URL found in comment');
+        return false;
+      }
+    }
+
+    setValidationError('');
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!comment.trim()) return;
+    setError('');
+    
+    if (!validateComment(comment)) {
+      return;
+    }
 
     const sanitizedComment = DOMPurify.sanitize(comment.trim());
     
@@ -22,11 +55,18 @@ const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId
 
       onCommentAdded(response.data.data);
       setComment('');
+      setValidationError('');
     } catch (error) {
-      console.error('Error posting comment:', error);
+      setError(error.response?.data?.message || 'Error posting comment');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleChange = (e) => {
+    const newComment = e.target.value;
+    setComment(newComment);
+    validateComment(newComment);
   };
 
   return (
@@ -34,18 +74,33 @@ const CommentForm = ({ postId, onCommentAdded, parentId }) => {  // Add parentId
       <div className="flex flex-col space-y-3">
         <textarea
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
+          onChange={handleChange}
           placeholder="Add a comment..."
-          className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+          className={`w-full px-4 py-2 rounded-lg bg-gray-700 border ${
+            validationError ? 'border-red-500' : 'border-gray-600'
+          } text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 resize-none overflow-y-auto whitespace-pre-wrap break-words`}
           rows="3"
+          maxLength={1000}
+          style={{ minHeight: '100px', maxHeight: '300px' }}
         />
-        <button
-          type="submit"
-          disabled={isSubmitting || !comment.trim()}
-          className="self-end px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? 'Posting...' : 'Post Comment'}
-        </button>
+        {validationError && (
+          <p className="text-sm text-red-400">{validationError}</p>
+        )}
+        {error && (
+          <p className="text-sm text-red-400">{error}</p>
+        )}
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-400">
+            {comment.length}/1000 characters
+          </span>
+          <button
+            type="submit"
+            disabled={isSubmitting || !comment.trim() || !!validationError}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? 'Posting...' : 'Post Comment'}
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -73,7 +128,9 @@ const CommentItem = ({ comment }) => {
           {formatDate(comment.createdAt)}
         </span>
       </div>
-      <p className="text-gray-300">{comment.content}</p>
+      <div className="prose prose-invert max-w-none">
+        <p className="text-gray-300 whitespace-pre-wrap break-words">{comment.content}</p>
+      </div>
     </div>
   );
 };

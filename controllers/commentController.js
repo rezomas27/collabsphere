@@ -42,6 +42,28 @@ const createComment = async (req, res) => {
         const { postId, content, parentId } = req.body;
         console.log('Creating comment:', { postId, content, parentId });
 
+        // Validate content length
+        if (content.length > 1000) {
+            return res.status(400).json({
+                success: false,
+                message: 'Comment cannot be more than 1000 characters'
+            });
+        }
+
+        // Validate URLs in content
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const urls = content.match(urlRegex) || [];
+        for (const url of urls) {
+            try {
+                new URL(url);
+            } catch (e) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid URL found in comment'
+                });
+            }
+        }
+
         if (!content?.trim()) {
             console.log('Comment content is empty');
             return res.status(400).json({
@@ -104,6 +126,16 @@ const createComment = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in createComment:', error);
+        
+        // Handle mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: messages.join(', ')
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: 'Server error while creating comment'
