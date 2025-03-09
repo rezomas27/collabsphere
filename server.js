@@ -20,6 +20,21 @@ const setupWebSocket = require('./server/websocket');
 const Post = require('./models/post');
 const mongoose = require('mongoose');
 
+// 1. Add required environment variables check
+const requiredEnvVars = [
+    'MONGODB_URI', 
+    'JWT_SECRET', 
+    'EMAIL_USER', 
+    'EMAIL_PASS'
+  ];
+  
+  for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+      console.error(`FATAL ERROR: ${envVar} is not defined in environment variables`);
+      process.exit(1);
+    }
+  }
+
 const MONGO_URI = process.env.MONGO_URI;
 
 const app = express();
@@ -33,6 +48,19 @@ app.set('wsServer', wsServer);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// 2. Add Helmet security headers in server.js
+app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", "wss://*.yourdomain.com", "https://*.yourdomain.com"],
+        // Add other directives as needed
+      }
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false
+  }));
 
 // CORS configuration
 app.use(cors({
@@ -106,6 +134,20 @@ const sessionConfig = {
     name: 'sessionId'
 };
 
+// 3. Add rate limiting to prevent abuse
+const rateLimit = require('express-rate-limit');
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests, please try again later.'
+});
+
+// Apply rate limiting to all routes
+app.use('/api/', apiLimiter);
+
 // Apply session middleware
 app.use(session(sessionConfig));
 
@@ -127,11 +169,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Security middleware
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginEmbedderPolicy: false
-}));
+
 app.use(mongoSanitize());
 app.use(hpp());
 
